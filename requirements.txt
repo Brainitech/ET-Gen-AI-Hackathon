@@ -1,0 +1,41 @@
+# ET-Pulse: AI-Native Business News Platform
+# All dependencies are open-source or free-tier compatible.
+# Zero OpenAI dependencies.
+
+# --- Web Framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# --- Frontend ---
+streamlit==1.42.0
+plotly==6.0.0
+
+# --- Database / Vector Store ---
+chromadb==0.6.3
+
+# --- Embeddings (local, no API key needed) ---
+sentence-transformers==3.3.1
+
+# --- Google Gen AI SDK (Gemini Flash + Veo) ---
+google-genai==1.5.0
+
+# --- Groq Cloud SDK (Llama 3) ---
+groq==0.15.0
+
+# --- RSS Feed Parsing ---
+feedparser==6.0.11
+
+# --- Async HTTP Client ---
+httpx==0.28.1
+
+# --- Environment Variables ---
+python-dotenv==1.0.1
+
+# --- IndicTrans2 Dependencies ---
+# NOTE: IndicTrans2 is cloned separately; these are its core deps.
+torch>=2.1.0
+transformers>=4.36.0
+sentencepiece==0.2.0
+sacremoses==0.1.1
