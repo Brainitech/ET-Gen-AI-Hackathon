@@ -1,186 +1,138 @@
 """
-Vernacular Engine Service — Indian Language Translation.
+aether_ai — Vernacular Business News Engine
 
-Integrates AI4Bharat's IndicTrans2 for culturally adapted translations
-of English text into Indian languages. Falls back to Gemini-based
-translation if the IndicTrans2 model is unavailable.
+Translates English business news into Hindi, Tamil, Telugu, Bengali with:
+  - Accurate base translation via deep-translator (Google Translate, free)
+  - LLM-powered naturalness post-processing (business terminology adaptation)
+  - Local cultural context note explaining financial terms to local readers
+  - Business terminology glossary extraction
 """
+import re
+import json
+from typing import Any, Dict, List
+from deep_translator import GoogleTranslator
+from app.core.config import get_llm_client
 
-import logging
-
-from google import genai
-from google.genai import types
-
-from app.core.config import get_settings
-from app.models.schemas import SupportedLanguage, TranslationResponse
-
-logger = logging.getLogger(__name__)
-
-# Language code → full name mapping for prompts.
-LANGUAGE_NAMES: dict[str, str] = {
-    "hi": "Hindi",
-    "ta": "Tamil",
-    "te": "Telugu",
-    "bn": "Bengali",
-    "mr": "Marathi",
-    "gu": "Gujarati",
-    "kn": "Kannada",
-    "ml": "Malayalam",
-    "pa": "Punjabi",
-    "or": "Odia",
+SUPPORTED_LANGUAGES = {
+    "hi": {"name": "Hindi", "native": "हिंदी", "flag": "🇮🇳"},
+    "ta": {"name": "Tamil", "native": "தமிழ்", "flag": "🇮🇳"},
+    "te": {"name": "Telugu", "native": "తెలుగు", "flag": "🇮🇳"},
+    "bn": {"name": "Bengali", "native": "বাংলা", "flag": "🇮🇳"},
 }
 
-# IndicTrans2 model reference (lazy-loaded).
-_indictrans_model = None
-_indictrans_tokenizer = None
-_indictrans_available: bool | None = None
+# Common business terms that need cultural adaptation rather than literal translation
+BUSINESS_TERMS = [
+    "mutual fund", "sensex", "nifty", "IPO", "FDI", "FPI", "SEBI", "RBI",
+    "unicorn", "startup", "venture capital", "angel investor", "hedge fund",
+    "NSE", "BSE", "MSME", "GST", "fiscal deficit", "repo rate", "CRR",
+    "inflation", "GDP", "CAGR", "EBITDA", "P/E ratio", "market cap",
+]
 
 
-def _try_load_indictrans2() -> bool:
-    """Attempt to load the IndicTrans2 model.
-
-    Returns True if successful, False otherwise. The result is cached
-    so subsequent calls are instant.
-    """
-    global _indictrans_model, _indictrans_tokenizer  # noqa: PLW0603
-    global _indictrans_available  # noqa: PLW0603
-
-    if _indictrans_available is not None:
-        return _indictrans_available
-
-    settings = get_settings()
+def _translate_base(text: str, target_lang: str) -> str:
+    """Base translation using Google Translate (free, no API key)."""
     try:
-        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+        translator = GoogleTranslator(source="en", target=target_lang)
+        # Google Translate has a ~5000 char limit per call
+        if len(text) <= 4500:
+            return translator.translate(text)
+        # Chunk for longer texts
+        chunks = [text[i:i+4500] for i in range(0, len(text), 4500)]
+        return " ".join(translator.translate(chunk) for chunk in chunks)
+    except Exception as e:
+        return f"[Translation error: {str(e)}]"
 
-        model_path = settings.indictrans2_model_dir
-        logger.info("Loading IndicTrans2 model from: %s", model_path)
 
-        _indictrans_tokenizer = AutoTokenizer.from_pretrained(
-            model_path, trust_remote_code=True
+def _post_process_and_contextualise(
+    original: str,
+    translated: str,
+    target_lang: str,
+) -> Dict[str, Any]:
+    """
+    Use LLM to:
+    1. Make the translation sound natural for business readers
+    2. Generate a local context note
+    3. Extract a terminology glossary
+    """
+    lang_info = SUPPORTED_LANGUAGES.get(target_lang, {"name": target_lang, "native": target_lang})
+    lang_name = lang_info["name"]
+
+    # Find which business terms appear in the original
+    found_terms = [t for t in BUSINESS_TERMS if t.lower() in original.lower()]
+    terms_str = ", ".join(found_terms) if found_terms else "general financial terms"
+
+    prompt = f"""You are a bilingual business news editor specialising in {lang_name}.
+
+ORIGINAL ENGLISH TEXT:
+{original[:2000]}
+
+RAW MACHINE TRANSLATION ({lang_name}):
+{translated[:2000]}
+
+The text contains these business/financial terms: {terms_str}
+
+Respond in this exact JSON format (no markdown fences):
+{{
+  "improved_translation": "A polished {lang_name} translation that sounds natural to a local business reader. Keep domain-specific English terms like SEBI, RBI, GDP, IPO as-is (they are widely understood). Adapt idioms and phrasing to feel local, not literal.",
+  "local_context_note": "A 2-3 sentence note in English explaining the story with cultural/local context that a {lang_name}-speaking reader in India would appreciate. Mention local relevance, comparison to similar Indian scenarios, or how it affects common people.",
+  "terminology_glossary": [
+    {{"term": "English term", "translation": "{lang_name} translation or transliteration", "explanation": "plain-language explanation in English"}}
+  ]
+}}
+
+Rules:
+- improved_translation must be in {lang_name} script
+- terminology_glossary should cover 3-5 key financial terms from the text
+- Return ONLY the JSON, no extra text"""
+
+    client, model = get_llm_client()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=1200,
         )
-        _indictrans_model = AutoModelForSeq2SeqLM.from_pretrained(
-            model_path, trust_remote_code=True
-        )
-        _indictrans_available = True
-        logger.info("IndicTrans2 model loaded successfully")
-
+        raw = resp.choices[0].message.content.strip()
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+        parsed = json.loads(raw)
+        return parsed
     except Exception:
-        logger.warning(
-            "IndicTrans2 model not available, will use Gemini fallback. "
-            "To use IndicTrans2, download the model to: %s",
-            settings.indictrans2_model_dir,
-        )
-        _indictrans_available = False
-
-    return _indictrans_available
+        # Fallback: return base translation without LLM enhancement
+        return {
+            "improved_translation": translated,
+            "local_context_note": "LLM post-processing unavailable — showing base machine translation.",
+            "terminology_glossary": [],
+        }
 
 
-def _translate_with_indictrans2(
-    text: str,
-    target_lang: str,
-) -> str:
-    """Translate using the local IndicTrans2 model.
-
-    Uses the HuggingFace transformers interface for IndicTrans2's
-    encoder-decoder architecture.
+def translate_text(text: str, target_lang: str) -> Dict[str, Any]:
     """
-    if _indictrans_tokenizer is None or _indictrans_model is None:
-        raise RuntimeError("IndicTrans2 model not loaded")
-
-    # IndicTrans2 expects language tags in the input.
-    lang_name = LANGUAGE_NAMES.get(target_lang, "Hindi")
-    prompt = f"Translate from English to {lang_name}: {text}"
-
-    inputs = _indictrans_tokenizer(
-        prompt,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=512,
-    )
-
-    generated = _indictrans_model.generate(
-        **inputs,
-        max_new_tokens=512,
-        num_beams=5,
-        length_penalty=1.0,
-    )
-
-    translated = _indictrans_tokenizer.decode(
-        generated[0], skip_special_tokens=True
-    )
-    return translated
-
-
-async def _translate_with_gemini(
-    text: str,
-    target_lang: str,
-) -> str:
-    """Fallback: translate using Google Gemini."""
-    settings = get_settings()
-    lang_name = LANGUAGE_NAMES.get(target_lang, "Hindi")
-
-    client = genai.Client(api_key=settings.gemini_api_key)
-
-    prompt = (
-        f"Translate the following English text to {lang_name}. "
-        f"Provide ONLY the translation, no explanations or notes. "
-        f"Ensure the translation is culturally appropriate for an "
-        f"Indian audience reading business news.\n\n"
-        f"Text: {text}"
-    )
-
-    response = client.models.generate_content(
-        model=settings.gemini_model_name,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.1,
-            max_output_tokens=1024,
-        ),
-    )
-
-    return response.text or text
-
-
-# ------------------------------------------------------------------
-# Public API
-# ------------------------------------------------------------------
-
-
-async def translate_text(
-    text: str,
-    target_language: SupportedLanguage,
-) -> TranslationResponse:
-    """Translate English text to the specified Indian language.
-
-    Tries IndicTrans2 first for quality translations, then falls
-    back to Gemini if the model is not available.
-
-    Args:
-        text: English source text.
-        target_language: Target language enum value.
-
-    Returns:
-        A ``TranslationResponse`` with the translated text.
+    Full vernacular translation pipeline.
+    Returns: translated text, local context note, terminology glossary.
     """
-    target_lang = target_language.value
-    engine = "indictrans2"
+    if target_lang not in SUPPORTED_LANGUAGES:
+        return {"error": f"Unsupported language '{target_lang}'. Choose: hi, ta, te, bn"}
 
-    if _try_load_indictrans2():
-        try:
-            translated = _translate_with_indictrans2(text, target_lang)
-        except Exception:
-            logger.exception("IndicTrans2 translation failed, using Gemini")
-            translated = await _translate_with_gemini(text, target_lang)
-            engine = "gemini_fallback"
-    else:
-        translated = await _translate_with_gemini(text, target_lang)
-        engine = "gemini_fallback"
+    if not text or len(text.strip()) < 10:
+        return {"error": "Text too short to translate."}
 
-    return TranslationResponse(
-        original_text=text,
-        translated_text=translated,
-        source_language="en",
-        target_language=target_lang,
-        engine=engine,
-    )
+    lang_info = SUPPORTED_LANGUAGES[target_lang]
+
+    # Step 1: Base machine translation
+    base_translation = _translate_base(text.strip(), target_lang)
+
+    # Step 2: LLM post-processing for naturalness + context
+    llm_result = _post_process_and_contextualise(text.strip(), base_translation, target_lang)
+
+    return {
+        "original": text.strip(),
+        "target_language": lang_info["name"],
+        "target_language_native": lang_info["native"],
+        "flag": lang_info["flag"],
+        "base_translation": base_translation,
+        "improved_translation": llm_result.get("improved_translation", base_translation),
+        "local_context_note": llm_result.get("local_context_note", ""),
+        "terminology_glossary": llm_result.get("terminology_glossary", []),
+    }

@@ -1,62 +1,53 @@
 """
-ET-Pulse application configuration.
-
-All settings are loaded from environment variables (.env file).
-Uses pydantic-settings for type-safe, validated configuration.
+aether_ai — Core Configuration
+Auto-detects LLM: Groq (if GROQ_API_KEY is set) else local Ollama
 """
-
-from functools import lru_cache
-
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Central configuration for the ET-Pulse application."""
+    # App
+    APP_ENV: str = "development"
+    APP_PORT: int = 8000
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    # Ollama (local LLM — default, no API key needed)
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_MODEL: str = "llama3.1:8b"
 
-    # --- Application ---
-    app_name: str = "ET-Pulse"
-    app_version: str = "1.0.0"
-    app_host: str = "0.0.0.0"
-    app_port: int = 8000
-    log_level: str = "info"
+    # Groq (optional cloud LLM — set key to enable)
+    GROQ_API_KEY: str = ""
 
-    # --- Google AI Studio (Gemini Flash) ---
-    gemini_api_key: str = ""
-    gemini_model_name: str = "gemini-2.0-flash"
+    # Economic Times RSS feeds
+    ET_RSS_MARKETS: str = "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms"
+    ET_RSS_TECH: str = "https://economictimes.indiatimes.com/tech/rssfeeds/13357270.cms"
+    ET_RSS_STARTUP: str = "https://economictimes.indiatimes.com/small-biz/startups/rssfeeds/18949484.cms"
+    ET_RSS_ECONOMY: str = "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms"
+    ET_RSS_POLICY: str = "https://economictimes.indiatimes.com/news/politics-and-nation/rssfeeds/12988124.cms"
 
-    # --- Groq Cloud (Llama 3) ---
-    groq_api_key: str = ""
-    groq_model_name: str = "llama-3.3-70b-versatile"
-
-    # --- Google Cloud (Veo API) ---
-    google_cloud_project: str = ""
-    veo_model_name: str = "veo-2.0-generate-001"
-
-    # --- ChromaDB ---
-    chroma_persist_dir: str = "./data/chroma"
-
-    # --- Embedding Model ---
-    embedding_model_name: str = "all-MiniLM-L6-v2"
-
-    # --- IndicTrans2 ---
-    indictrans2_model_dir: str = "./models/indictrans2"
-
-    # --- RSS Feeds ---
-    et_rss_feeds: list[str] = [
-        "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
-        "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-        "https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms",
-    ]
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "allow"
 
 
-@lru_cache
-def get_settings() -> Settings:
-    """Return a cached Settings instance (singleton)."""
-    return Settings()
+settings = Settings()
+
+
+def get_llm_client():
+    """
+    Returns an openai.OpenAI client pointed at:
+    - Groq cloud, if GROQ_API_KEY is set in .env
+    - Local Ollama, otherwise (default for team repo — no secrets needed)
+    """
+    import openai
+    if settings.GROQ_API_KEY:
+        return openai.OpenAI(
+            api_key=settings.GROQ_API_KEY,
+            base_url="https://api.groq.com/openai/v1",
+        ), "llama3-8b-8192"
+    else:
+        return openai.OpenAI(
+            api_key="ollama",
+            base_url=settings.OLLAMA_BASE_URL,
+        ), settings.OLLAMA_MODEL

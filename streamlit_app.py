@@ -1,757 +1,814 @@
 """
-ET-Pulse Streamlit Frontend.
-
-A premium, dark-themed dashboard connecting to all 5 ET-Pulse
-FastAPI backend features.
-
-Run:
-    streamlit run streamlit_app.py
+aether_ai — Streamlit Frontend
+Premium dark glassmorphism UI | ET Hackathon Round 2
+Features: Story Arc Tracker · News Summarizer · Vernacular Business News Engine
 """
-
-import json
-import time
+import streamlit as st
+import requests
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
 from datetime import datetime
 
-import httpx
-import plotly.graph_objects as go
-import streamlit as st
-
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
-
-API_BASE = "http://localhost:8000/api/v1"
-TIMEOUT = 60.0
-
-# ------------------------------------------------------------------
-# Page config & custom CSS
-# ------------------------------------------------------------------
-
+# ── Page Configuration ────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ET-Pulse • AI News Platform",
+    page_title="aether_ai — AI-Native Business News",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+API_BASE = "http://localhost:8000/api/v1"
 
-    /* ---------- Root variables ---------- */
-    :root {
-        --bg-primary: #0a0a0f;
-        --bg-secondary: #12121a;
-        --bg-card: #1a1a2e;
-        --bg-card-hover: #222240;
-        --accent-primary: #6c63ff;
-        --accent-secondary: #ff6584;
-        --accent-glow: rgba(108, 99, 255, 0.25);
-        --text-primary: #eaeaff;
-        --text-secondary: #9d9db5;
-        --text-muted: #6b6b80;
-        --border-subtle: rgba(108, 99, 255, 0.15);
-        --gradient-hero: linear-gradient(135deg, #6c63ff 0%, #ff6584 50%, #f5a623 100%);
-        --success: #00e676;
-        --warning: #ffab40;
-        --danger: #ff5252;
-    }
+# ── Global CSS ─────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Inter', sans-serif !important;
-        background: var(--bg-primary) !important;
-        color: var(--text-primary) !important;
-    }
+/* Base */
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+.stApp {
+    background: linear-gradient(135deg, #0a0a0f 0%, #0d1117 40%, #0a0f1e 100%);
+    color: #e2e8f0;
+}
 
-    [data-testid="stSidebar"] {
-        background: var(--bg-secondary) !important;
-        border-right: 1px solid var(--border-subtle) !important;
-    }
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0d1117 0%, #0a0a1a 100%);
+    border-right: 1px solid rgba(99,102,241,0.2);
+}
+section[data-testid="stSidebar"] .stRadio label {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+}
+section[data-testid="stSidebar"] .stRadio label:hover { color: #e2e8f0; }
 
-    [data-testid="stSidebar"] .stMarkdown p,
-    [data-testid="stSidebar"] .stMarkdown li,
-    [data-testid="stSidebar"] label {
-        color: var(--text-secondary) !important;
-    }
+/* Hero banner */
+.hero-banner {
+    background: linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(168,85,247,0.1) 50%, rgba(59,130,246,0.1) 100%);
+    border: 1px solid rgba(99,102,241,0.3);
+    border-radius: 20px;
+    padding: 2rem 2.5rem;
+    margin-bottom: 2rem;
+    backdrop-filter: blur(10px);
+}
+.hero-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #818cf8, #c084fc, #60a5fa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+}
+.hero-sub {
+    color: #94a3b8;
+    font-size: 1rem;
+    margin-top: 0.5rem;
+}
 
-    /* ---------- Headers ---------- */
-    h1, h2, h3 {
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 800 !important;
-        letter-spacing: -0.02em !important;
-    }
-    h1 { color: var(--text-primary) !important; }
-    h2 { color: var(--text-primary) !important; }
-    h3 { color: var(--accent-primary) !important; }
+/* Glass cards */
+.glass-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    backdrop-filter: blur(10px);
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+.glass-card:hover {
+    border-color: rgba(99,102,241,0.4);
+    box-shadow: 0 0 20px rgba(99,102,241,0.1);
+}
 
-    /* ---------- Hero badge ---------- */
-    .hero-badge {
-        background: var(--gradient-hero);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 2.8rem;
-        font-weight: 900;
-        letter-spacing: -0.03em;
-        line-height: 1.1;
-        margin-bottom: 0;
-    }
-    .hero-sub {
-        color: var(--text-secondary);
-        font-size: 1.05rem;
-        font-weight: 400;
-        margin-top: 4px;
-    }
+/* Sentiment badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.badge-positive { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+.badge-negative { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+.badge-neutral  { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
+.badge-rising   { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+.badge-falling  { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+.badge-mixed    { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.badge-stable   { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
 
-    /* ---------- Glass cards ---------- */
-    .glass-card {
-        background: rgba(26, 26, 46, 0.7);
-        backdrop-filter: blur(12px);
-        border: 1px solid var(--border-subtle);
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 16px;
-        transition: all 0.3s ease;
-    }
-    .glass-card:hover {
-        border-color: var(--accent-primary);
-        box-shadow: 0 0 30px var(--accent-glow);
-        transform: translateY(-2px);
-    }
+/* Category pills */
+.cat-markets  { background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+.cat-startup  { background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+.cat-policy   { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+.cat-macro    { background: rgba(20,184,166,0.15); color: #2dd4bf; border: 1px solid rgba(20,184,166,0.3); }
+.cat-tech     { background: rgba(236,72,153,0.15); color: #f472b6; border: 1px solid rgba(236,72,153,0.3); }
+.cat-general  { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
 
-    /* ---------- Stat pill ---------- */
-    .stat-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(108, 99, 255, 0.12);
-        border: 1px solid var(--border-subtle);
-        border-radius: 999px;
-        padding: 6px 14px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--accent-primary);
-    }
+/* Section headings */
+.section-heading {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #818cf8;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 1.5rem 0 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(99,102,241,0.2);
+}
 
-    /* ---------- Sentiment badges ---------- */
-    .sentiment-positive { color: var(--success); font-weight: 700; }
-    .sentiment-negative { color: var(--danger); font-weight: 700; }
-    .sentiment-neutral  { color: var(--warning); font-weight: 700; }
-    .sentiment-mixed    { color: var(--accent-primary); font-weight: 700; }
+/* Timeline items */
+.timeline-item {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    align-items: flex-start;
+}
+.timeline-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #818cf8;
+    margin-top: 5px;
+    flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(129,140,248,0.5);
+}
+.timeline-dot-high   { background: #f87171; box-shadow: 0 0 8px rgba(248,113,113,0.5); }
+.timeline-dot-medium { background: #fbbf24; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
+.timeline-dot-low    { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.5); }
 
-    /* ---------- Buttons ---------- */
-    .stButton > button {
-        background: var(--gradient-hero) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 600 !important;
-        font-family: 'Inter', sans-serif !important;
-        padding: 0.55rem 1.6rem !important;
-        transition: all 0.3s ease !important;
-        letter-spacing: 0.01em !important;
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px var(--accent-glow) !important;
-    }
+/* Player cards */
+.player-card {
+    background: rgba(99,102,241,0.05);
+    border: 1px solid rgba(99,102,241,0.2);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+}
+.player-name { font-weight: 600; color: #e2e8f0; font-size: 0.95rem; }
+.player-role { color: #94a3b8; font-size: 0.82rem; margin-top: 2px; }
 
-    /* ---------- Inputs ---------- */
-    .stTextInput input, .stTextArea textarea, .stSelectbox select {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 10px !important;
-        color: var(--text-primary) !important;
-        font-family: 'Inter', sans-serif !important;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: var(--accent-primary) !important;
-        box-shadow: 0 0 15px var(--accent-glow) !important;
-    }
+/* Takeaway bullets */
+.takeaway {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.takeaway:last-child { border-bottom: none; }
+.takeaway-bullet {
+    color: #818cf8;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+.takeaway-text { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5; }
 
-    /* ---------- Tabs ---------- */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background: transparent;
-    }
-    .stTabs [data-baseweb="tab"] {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 10px !important;
-        color: var(--text-secondary) !important;
-        font-weight: 600 !important;
-        padding: 8px 20px !important;
-    }
-    .stTabs [aria-selected="true"] {
-        background: var(--accent-primary) !important;
-        color: white !important;
-        border-color: var(--accent-primary) !important;
-    }
+/* Language flag button */
+.lang-btn {
+    border: 1px solid rgba(99,102,241,0.3);
+    border-radius: 10px;
+    padding: 0.5rem 1rem;
+    background: rgba(99,102,241,0.07);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    font-size: 1.1rem;
+}
 
-    /* ---------- Expander ---------- */
-    .streamlit-expanderHeader {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 10px !important;
-        color: var(--text-primary) !important;
-        font-weight: 600 !important;
-    }
+/* Glossary cards */
+.gloss-card {
+    background: rgba(16,185,129,0.05);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+}
+.gloss-term { font-weight: 600; color: #34d399; font-size: 0.9rem; }
+.gloss-trans { color: #e2e8f0; font-size: 0.9rem; }
+.gloss-exp { color: #94a3b8; font-size: 0.82rem; margin-top: 4px; }
 
-    /* ---------- Dividers ---------- */
-    hr {
-        border-color: var(--border-subtle) !important;
-        margin: 2rem 0 !important;
-    }
+/* Streamlit button override */
+.stButton>button {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 0.5rem 1.5rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    transition: opacity 0.2s, transform 0.1s;
+    width: 100%;
+}
+.stButton>button:hover { opacity: 0.85; transform: translateY(-1px); }
 
-    /* ---------- Metric ---------- */
-    [data-testid="stMetric"] {
-        background: var(--bg-card);
-        border: 1px solid var(--border-subtle);
-        border-radius: 14px;
-        padding: 16px 20px;
-    }
-    [data-testid="stMetricLabel"] {
-        color: var(--text-secondary) !important;
-        font-weight: 600 !important;
-    }
-    [data-testid="stMetricValue"] {
-        color: var(--text-primary) !important;
-        font-weight: 800 !important;
-    }
+/* Input fields */
+.stTextInput input, .stTextArea textarea, .stSelectbox select {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 10px !important;
+    color: #e2e8f0 !important;
+}
 
-    /* ---------- Hide streamlit branding ---------- */
-    #MainMenu, footer, header { visibility: hidden; }
-
-    /* ---------- Scrollbar ---------- */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: var(--bg-primary); }
-    ::-webkit-scrollbar-thumb {
-        background: var(--accent-primary);
-        border-radius: 3px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# ------------------------------------------------------------------
-# HTTP helpers
-# ------------------------------------------------------------------
+/* Error / warning */
+.err-box {
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 10px;
+    padding: 1rem;
+    color: #fca5a5;
+}
+.info-box {
+    background: rgba(59,130,246,0.07);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 10px;
+    padding: 1rem;
+    color: #93c5fd;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
-def _post(endpoint: str, payload: dict) -> dict | None:
-    """POST to the FastAPI backend."""
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def api_post(endpoint: str, payload: dict):
     try:
-        r = httpx.post(
-            f"{API_BASE}{endpoint}",
-            json=payload,
-            timeout=TIMEOUT,
-        )
+        r = requests.post(f"{API_BASE}{endpoint}", json=payload, timeout=120)
         r.raise_for_status()
-        return r.json()
-    except httpx.ConnectError:
-        st.error("⚠️ Cannot connect to the backend. Is `uvicorn app.main:app` running on port 8000?")
-        return None
-    except httpx.HTTPStatusError as e:
-        st.error(f"API error {e.response.status_code}: {e.response.text}")
-        return None
+        return r.json(), None
+    except requests.exceptions.ConnectionError:
+        return None, "❌ Cannot reach the backend. Run `uvicorn app.main:app --reload` first."
+    except requests.exceptions.HTTPError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return None, f"API Error: {detail}"
     except Exception as e:
-        st.error(f"Request failed: {e}")
-        return None
+        return None, str(e)
 
 
-def _get(endpoint: str) -> dict | None:
-    """GET from the FastAPI backend."""
-    try:
-        r = httpx.get(
-            f"{API_BASE}{endpoint}",
-            timeout=TIMEOUT,
-        )
-        r.raise_for_status()
-        return r.json()
-    except httpx.ConnectError:
-        st.error("⚠️ Cannot connect to the backend. Is `uvicorn app.main:app` running on port 8000?")
-        return None
-    except httpx.HTTPStatusError as e:
-        st.error(f"API error {e.response.status_code}: {e.response.text}")
-        return None
-    except Exception as e:
-        st.error(f"Request failed: {e}")
-        return None
+def sentiment_badge(score: float) -> str:
+    if score >= 0.05:
+        return '<span class="badge badge-positive">● Positive</span>'
+    elif score <= -0.05:
+        return '<span class="badge badge-negative">● Negative</span>'
+    return '<span class="badge badge-neutral">● Neutral</span>'
 
 
-# ------------------------------------------------------------------
-# Sidebar
-# ------------------------------------------------------------------
+def trend_badge(trend: str) -> str:
+    cls = f"badge badge-{trend.lower()}" if trend.lower() in ["rising","falling","mixed","stable"] else "badge badge-neutral"
+    icons = {"rising":"↑","falling":"↓","mixed":"⟳","stable":"→"}
+    icon = icons.get(trend.lower(), "•")
+    return f'<span class="{cls}">{icon} {trend.capitalize()}</span>'
 
+
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown('<p class="hero-badge">⚡ ET-Pulse</p>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">AI-Native Business News Platform</p>', unsafe_allow_html=True)
-    st.divider()
+    st.markdown("""
+    <div style="padding: 1rem 0 1.5rem; text-align:center;">
+        <div style="font-family:'Space Grotesk',sans-serif; font-size:1.6rem; font-weight:700;
+             background:linear-gradient(135deg,#818cf8,#c084fc); -webkit-background-clip:text;
+             -webkit-text-fill-color:transparent; background-clip:text;">⚡ aether_ai</div>
+        <div style="color:#475569; font-size:0.75rem; margin-top:4px;">ET Hackathon · Round 2</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     page = st.radio(
         "Navigate",
-        [
-            "🏠 Dashboard",
-            "📰 My ET",
-            "🧭 News Navigator",
-            "📈 Story Arc Tracker",
-            "🌐 Vernacular Engine",
-            "🎬 Video Studio",
-        ],
+        ["🏠 Home", "📖 Story Arc Tracker", "📰 News Summarizer", "🌐 Vernacular Engine"],
         label_visibility="collapsed",
     )
 
-    st.divider()
-    st.markdown(
-        '<div class="stat-pill">🟢 All systems operational</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+    st.markdown("---")
+    st.markdown("""
+    <div style="color:#475569; font-size:0.75rem; padding: 0 0.5rem;">
+        <div style="margin-bottom:0.5rem; color:#64748b; font-weight:500;">Requirements</div>
+        <div>✅ Ollama running locally</div>
+        <div style="margin-top:4px;">✅ <code style="color:#818cf8">llama3.1:8b</code> pulled</div>
+        <div style="margin-top:4px;">✅ Backend on port 8000</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------------
-# Dashboard
-# ------------------------------------------------------------------
+# ═══════════════════════════════════════════════════════════════════════════════
+# HOME PAGE
+# ═══════════════════════════════════════════════════════════════════════════════
+if page == "🏠 Home":
+    st.markdown("""
+    <div class="hero-banner">
+        <p class="hero-title">⚡ aether_ai</p>
+        <p class="hero-sub">AI-Native Business News · Powered by Ollama · 100% Free & Open Source</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-if page == "🏠 Dashboard":
-    st.markdown('<p class="hero-badge">Welcome to ET-Pulse</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-sub">Your AI-powered command centre for Indian business news</p>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("""
+        <div class="glass-card" style="text-align:center; padding:2rem 1.5rem;">
+            <div style="font-size:2.5rem; margin-bottom:1rem;">🗺️</div>
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; font-weight:600; color:#e2e8f0; margin-bottom:0.5rem;">Story Arc Tracker</div>
+            <div style="color:#94a3b8; font-size:0.85rem; line-height:1.6;">Pick any business story. Get a complete visual narrative — timeline, key players, sentiment shifts, contrarian views & predictions.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div class="glass-card" style="text-align:center; padding:2rem 1.5rem;">
+            <div style="font-size:2.5rem; margin-bottom:1rem;">📰</div>
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; font-weight:600; color:#e2e8f0; margin-bottom:0.5rem;">News Summarizer</div>
+            <div style="color:#94a3b8; font-size:0.85rem; line-height:1.6;">Paste any article or URL. Get a crisp 3-sentence summary plus 5 actionable key takeaways in seconds.</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown("""
+        <div class="glass-card" style="text-align:center; padding:2rem 1.5rem;">
+            <div style="font-size:2.5rem; margin-bottom:1rem;">🌐</div>
+            <div style="font-family:'Space Grotesk',sans-serif; font-size:1.1rem; font-weight:600; color:#e2e8f0; margin-bottom:0.5rem;">Vernacular Engine</div>
+            <div style="color:#94a3b8; font-size:0.85rem; line-height:1.6;">Real-time, culturally-adapted translation into Hindi, Tamil, Telugu & Bengali with local context notes.</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("📰 My ET", "Personalized")
-    c2.metric("🧭 Navigator", "RAG Q&A")
-    c3.metric("📈 Story Arc", "Sentiment")
-    c4.metric("🌐 Vernacular", "10 Languages")
-    c5.metric("🎬 Video", "AI Shorts")
+    st.markdown("""
+    <div class="glass-card" style="margin-top:1rem;">
+        <div class="section-heading">⚡ Quick Start</div>
+        <div style="color:#94a3b8; font-size:0.88rem; line-height:2;">
+            <b style="color:#e2e8f0;">1.</b> Make sure Ollama is running: <code style="color:#818cf8; background:rgba(99,102,241,0.1); padding:2px 8px; border-radius:4px;">ollama run llama3.1:8b</code><br/>
+            <b style="color:#e2e8f0;">2.</b> Start the backend: <code style="color:#818cf8; background:rgba(99,102,241,0.1); padding:2px 8px; border-radius:4px;">uvicorn app.main:app --reload</code><br/>
+            <b style="color:#e2e8f0;">3.</b> Use the sidebar to navigate to any feature →
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.divider()
 
-    col_l, col_r = st.columns(2)
-    with col_l:
-        st.markdown(
-            """
-            <div class="glass-card">
-                <h3>🚀 Quick Start</h3>
-                <ol style="color: var(--text-secondary); line-height: 2;">
-                    <li><strong>Ingest RSS</strong> — Go to <em>My ET</em> and click <strong>Ingest RSS Feeds</strong></li>
-                    <li><strong>Ask Questions</strong> — Use <em>News Navigator</em> to query your knowledge base</li>
-                    <li><strong>Track Stories</strong> — Analyze any company or sector in <em>Story Arc Tracker</em></li>
-                    <li><strong>Translate</strong> — Convert articles to 10 Indian languages</li>
-                    <li><strong>Generate Videos</strong> — Create AI news shorts in <em>Video Studio</em></li>
-                </ol>
-            </div>
-            """,
-            unsafe_allow_html=True,
+# ═══════════════════════════════════════════════════════════════════════════════
+# STORY ARC TRACKER
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📖 Story Arc Tracker":
+    st.markdown("""
+    <div class="hero-banner">
+        <p class="hero-title">🗺️ Story Arc Tracker</p>
+        <p class="hero-sub">Enter any business topic. AI builds a complete visual narrative from live ET articles.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_inp, col_btn = st.columns([4, 1])
+    with col_inp:
+        topic = st.text_input(
+            "Business topic",
+            placeholder="e.g. Adani Group, Jio IPO, RBI rate cut, Zomato…",
+            label_visibility="collapsed",
         )
-    with col_r:
-        st.markdown(
-            """
-            <div class="glass-card">
-                <h3>🧠 Architecture</h3>
-                <ul style="color: var(--text-secondary); line-height: 2;">
-                    <li>📦 <strong>ChromaDB</strong> — Local vector store</li>
-                    <li>🔤 <strong>sentence-transformers</strong> — Local embeddings</li>
-                    <li>✨ <strong>Gemini Flash</strong> — RAG synthesis & scripts</li>
-                    <li>⚡ <strong>Groq / Llama 3</strong> — Fast sentiment analysis</li>
-                    <li>🗣️ <strong>IndicTrans2</strong> — Indian language translation</li>
-                    <li>🎥 <strong>Google Veo</strong> — Video generation</li>
-                </ul>
-            </div>
-            """,
-            unsafe_allow_html=True,
+    with col_btn:
+        generate = st.button("⚡ Generate Arc", use_container_width=True)
+
+    # Example topics
+    st.markdown("""
+    <div style="color:#475569; font-size:0.8rem; margin-top:-0.5rem; margin-bottom:1rem;">
+        Try: &nbsp;
+        <span style="color:#818cf8;">Adani Group</span> &nbsp;·&nbsp;
+        <span style="color:#818cf8;">Reliance Jio IPO</span> &nbsp;·&nbsp;
+        <span style="color:#818cf8;">RBI rate cut</span> &nbsp;·&nbsp;
+        <span style="color:#818cf8;">Startups funding winter</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if generate and topic.strip():
+        with st.spinner(f"🔍 Analysing {len([topic])} topic across ET articles…"):
+            data, err = api_post("/story-arc", {"topic": topic})
+
+        if err:
+            st.markdown(f'<div class="err-box">{err}</div>', unsafe_allow_html=True)
+        elif data:
+            # ── Stats bar ─────────────────────────────────────────────────────
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                st.metric("📰 Articles Analysed", data.get("article_count", 0))
+            with m2:
+                st.metric("📅 Timeline Events", len(data.get("timeline", [])))
+            with m3:
+                st.metric("👥 Key Players", len(data.get("key_players", [])))
+            with m4:
+                trend = data.get("sentiment_trend", "mixed")
+                st.metric("📊 Sentiment Trend", trend.capitalize())
+
+            # ── Sentiment chart ───────────────────────────────────────────────
+            sentiment_data = data.get("sentiment_data", [])
+            if sentiment_data:
+                st.markdown('<div class="section-heading">📊 Sentiment Over Articles</div>', unsafe_allow_html=True)
+                df = pd.DataFrame(sentiment_data)
+                df["color"] = df["score"].apply(
+                    lambda s: "#4ade80" if s >= 0.05 else ("#f87171" if s <= -0.05 else "#94a3b8")
+                )
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=list(range(len(df))),
+                    y=df["score"],
+                    marker_color=df["color"],
+                    hovertemplate="<b>%{customdata}</b><br>Score: %{y:.3f}<extra></extra>",
+                    customdata=df["title"],
+                ))
+                fig.add_hline(y=0, line_color="rgba(255,255,255,0.2)", line_dash="dash")
+                fig.add_hrect(y0=0.05, y1=1, fillcolor="rgba(74,222,128,0.05)", line_width=0)
+                fig.add_hrect(y0=-1, y1=-0.05, fillcolor="rgba(248,113,113,0.05)", line_width=0)
+                fig.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showticklabels=False, gridcolor="rgba(255,255,255,0.05)"),
+                    yaxis=dict(gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#94a3b8"), range=[-1, 1]),
+                    margin=dict(l=0, r=0, t=10, b=10),
+                    height=220,
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            col_l, col_r = st.columns([3, 2])
+
+            # ── Timeline ──────────────────────────────────────────────────────
+            with col_l:
+                timeline = data.get("timeline", [])
+                if timeline:
+                    st.markdown('<div class="section-heading">📅 Event Timeline</div>', unsafe_allow_html=True)
+                    for ev in timeline:
+                        sig = ev.get("significance", "medium").lower()
+                        dot_cls = f"timeline-dot-{sig}"
+                        st.markdown(f"""
+                        <div class="timeline-item">
+                            <div class="timeline-dot {dot_cls}"></div>
+                            <div>
+                                <div style="color:#94a3b8; font-size:0.75rem;">{ev.get('date','')}</div>
+                                <div style="color:#e2e8f0; font-size:0.88rem; margin-top:2px;">{ev.get('event','')}</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                # ── Sentiment summary ─────────────────────────────────────────
+                sum_text = data.get("sentiment_summary", "")
+                if sum_text:
+                    st.markdown('<div class="section-heading">💬 Sentiment Analysis</div>', unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="glass-card">
+                        <div style="margin-bottom:0.5rem;">{trend_badge(data.get("sentiment_trend","mixed"))}</div>
+                        <div style="color:#cbd5e1; font-size:0.9rem; line-height:1.6;">{sum_text}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # ── Key players ───────────────────────────────────────────────────
+            with col_r:
+                players = data.get("key_players", [])
+                if players:
+                    st.markdown('<div class="section-heading">👥 Key Players</div>', unsafe_allow_html=True)
+                    for p in players[:6]:
+                        stance = p.get("stance", "neutral").lower()
+                        st.markdown(f"""
+                        <div class="player-card">
+                            <div class="player-name">{p.get('name','')}</div>
+                            <div class="player-role">{p.get('role','')}</div>
+                            <div style="margin-top:6px;">{sentiment_badge(0.1 if stance=='positive' else (-0.1 if stance=='negative' else 0))}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+
+            # ── Contrarian view ───────────────────────────────────────────────
+            contrarian = data.get("contrarian_view", "")
+            if contrarian:
+                st.markdown('<div class="section-heading">🔄 Contrarian View</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="glass-card" style="border-color:rgba(251,191,36,0.3);">
+                    <div style="color:#fbbf24; font-size:0.85rem; font-weight:600; margin-bottom:0.5rem;">⚠️ Alternative Perspective</div>
+                    <div style="color:#cbd5e1; font-size:0.9rem; line-height:1.7;">{contrarian}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    elif generate and not topic.strip():
+        st.warning("Please enter a topic to analyse.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEWS SUMMARIZER
+# ═══════════════════════════════════════════════════════════════════════════════
+elif page == "📰 News Summarizer":
+    st.markdown("""
+    <div class="hero-banner">
+        <p class="hero-title">📰 News Summarizer</p>
+        <p class="hero-sub">Paste any article or URL. Get a crisp AI summary with key takeaways.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    input_mode = st.radio("Input type", ["📝 Paste Text", "🔗 Article URL"], horizontal=True)
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    article_text = None
+    article_url = None
+
+    if input_mode == "📝 Paste Text":
+        article_text = st.text_area(
+            "Article text",
+            placeholder="Paste the full article text here…",
+            height=260,
+            label_visibility="collapsed",
+        )
+    else:
+        article_url = st.text_input(
+            "Article URL",
+            placeholder="https://economictimes.indiatimes.com/...",
+            label_visibility="collapsed",
         )
 
+    summarize_btn = st.button("📰 Summarize Article", use_container_width=False)
 
-# ------------------------------------------------------------------
-# My ET — Personalized News
-# ------------------------------------------------------------------
+    if summarize_btn:
+        payload = {}
+        if article_text:
+            payload["text"] = article_text
+        elif article_url:
+            payload["url"] = article_url
+        else:
+            st.warning("Please paste text or enter a URL.")
+            st.stop()
 
-elif page == "📰 My ET":
-    st.markdown('<p class="hero-badge">📰 My ET</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-sub">Personalized news powered by semantic search</p>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
+        with st.spinner("🤖 Generating summary…"):
+            data, err = api_post("/summarize", payload)
 
-    tab1, tab2, tab3 = st.tabs(["🔄 Ingest RSS", "👤 Profile", "📖 Feed"])
+        if err:
+            st.markdown(f'<div class="err-box">{err}</div>', unsafe_allow_html=True)
+        elif data:
+            # ── Metadata bar ──────────────────────────────────────────────────
+            cat = data.get("category", "general")
+            read_time = data.get("read_time_min", 1)
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                st.metric("🏷️ Category", cat.capitalize())
+            with m2:
+                st.metric("⏱️ Read Time", f"{read_time} min")
+            with m3:
+                st.metric("📏 Article Length", f"{data.get('char_count',0):,} chars")
 
-    # ---- Ingest tab ----
-    with tab1:
-        st.markdown("Fetch live articles from Economic Times RSS feeds and index them into ChromaDB.")
-        if st.button("⚡ Ingest RSS Feeds", key="ingest_rss"):
-            with st.spinner("Fetching and embedding articles…"):
-                result = _post("/my-et/ingest-rss", {})
-            if result:
-                st.success(f"✅ Ingested **{result['ingested_count']}** articles!")
-                st.balloons()
+            # ── Summary ───────────────────────────────────────────────────────
+            st.markdown('<div class="section-heading">💡 AI Summary</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="glass-card" style="border-color:rgba(99,102,241,0.35);">
+                <div style="color:#e2e8f0; font-size:1rem; line-height:1.8;">
+                    {data.get("summary", "Summary not available.")}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # ---- Profile tab ----
-    with tab2:
-        st.markdown("Create your interest profile for personalised feed ranking.")
-        with st.form("profile_form"):
-            user_id = st.text_input("User ID", value="user_001", placeholder="Enter user ID")
-            interests = st.text_area(
-                "Interests (one per line)",
-                value="fintech\nIPO\nstartups\nRBI policy",
-                height=120,
-            )
-            categories = st.multiselect(
-                "Preferred Categories",
-                ["Markets", "Economy", "Tech", "Banking", "Auto", "Pharma", "Energy"],
-                default=["Markets", "Tech"],
-            )
-            submitted = st.form_submit_button("💾 Save Profile")
-
-        if submitted:
-            interests_list = [i.strip() for i in interests.strip().split("\n") if i.strip()]
-            payload = {
-                "user_id": user_id,
-                "interests": interests_list,
-                "preferred_categories": categories,
-            }
-            result = _post("/my-et/profile", payload)
-            if result:
-                st.success(f"✅ Profile saved for **{result['user_id']}**!")
-                st.json(result)
-
-    # ---- Feed tab ----
-    with tab3:
-        st.markdown("Retrieve your personalised news feed.")
-        col_a, col_b = st.columns([3, 1])
-        with col_a:
-            feed_user_id = st.text_input("User ID", value="user_001", key="feed_uid")
-        with col_b:
-            top_k = st.number_input("Articles", min_value=1, max_value=50, value=10)
-
-        if st.button("📖 Get My Feed", key="get_feed"):
-            with st.spinner("Searching for your personalised articles…"):
-                result = _get(f"/my-et/feed/{feed_user_id}?top_k={top_k}")
-            if result:
-                st.markdown(f'<div class="stat-pill">📊 {result["total_results"]} articles found</div>', unsafe_allow_html=True)
-                st.write("")
-                for i, article in enumerate(result.get("articles", []), 1):
-                    with st.expander(f"**{i}. {article['title'][:80]}**", expanded=(i <= 3)):
-                        st.markdown(f"**Source:** {article.get('source', 'N/A')}  •  **Category:** {article.get('category', 'N/A')}")
-                        st.write(article.get("summary", ""))
-                        if article.get("url"):
-                            st.markdown(f"[Read full article →]({article['url']})")
+            # ── Key takeaways ─────────────────────────────────────────────────
+            takeaways = data.get("key_takeaways", [])
+            if takeaways:
+                st.markdown('<div class="section-heading">🎯 Key Takeaways</div>', unsafe_allow_html=True)
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                for i, t in enumerate(takeaways, 1):
+                    st.markdown(f"""
+                    <div class="takeaway">
+                        <span class="takeaway-bullet">{i}.</span>
+                        <span class="takeaway-text">{t}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------------
-# News Navigator — RAG Q&A
-# ------------------------------------------------------------------
-
-elif page == "🧭 News Navigator":
-    st.markdown('<p class="hero-badge">🧭 News Navigator</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-sub">Ask anything about business news — powered by RAG + Gemini Flash</p>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
-
-    question = st.text_area(
-        "Your question",
-        placeholder="e.g. What are the latest developments in Indian fintech regulations?",
-        height=100,
-    )
-    col_q1, col_q2 = st.columns([1, 4])
-    with col_q1:
-        nav_top_k = st.number_input("Sources", min_value=1, max_value=20, value=5, key="nav_k")
-
-    if st.button("🔍 Ask Navigator", key="ask_nav", disabled=not question.strip()):
-        with st.spinner("Retrieving articles & synthesizing answer…"):
-            result = _post("/navigator/query", {"question": question, "top_k": nav_top_k})
-
-        if result:
-            # Answer section
-            st.markdown("### 💡 Answer")
-            st.markdown(
-                f'<div class="glass-card">{result["answer"]}</div>',
-                unsafe_allow_html=True,
-            )
-
-            # Sources section
-            sources = result.get("sources", [])
-            if sources:
-                st.markdown(f"### 📚 Sources ({len(sources)})")
-                for s in sources:
-                    score_pct = round(s["relevance_score"] * 100, 1)
-                    color = "var(--success)" if score_pct > 70 else ("var(--warning)" if score_pct > 40 else "var(--danger)")
-                    st.markdown(
-                        f"""<div class="glass-card" style="padding: 14px 20px;">
-                            <strong>{s['title']}</strong>
-                            <span style="float: right; color: {color}; font-weight: 700;">{score_pct}% match</span>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
-
-            st.caption(f"Model: {result.get('model_used', 'N/A')}")
-
-
-# ------------------------------------------------------------------
-# Story Arc Tracker
-# ------------------------------------------------------------------
-
-elif page == "📈 Story Arc Tracker":
-    st.markdown('<p class="hero-badge">📈 Story Arc Tracker</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-sub">Timeline & sentiment analysis powered by Groq / Llama 3</p>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
-
-    col_t1, col_t2 = st.columns([3, 1])
-    with col_t1:
-        topic = st.text_input("Topic or entity", placeholder="e.g. Reliance Industries, RBI, Tata Motors")
-    with col_t2:
-        arc_top_k = st.number_input("Articles", min_value=1, max_value=50, value=10, key="arc_k")
-
-    if st.button("📊 Analyze Story Arc", key="analyze_arc", disabled=not topic.strip()):
-        with st.spinner("Analyzing with Groq / Llama 3 …"):
-            result = _post("/story-arc/analyze", {"topic": topic, "top_k": arc_top_k})
-
-        if result:
-            # Sentiment overview
-            sa = result.get("sentiment_analysis", {})
-            st.markdown("### 🎯 Sentiment Overview")
-
-            s1, s2, s3, s4 = st.columns(4)
-            sentiment = sa.get("overall_sentiment", "neutral")
-            sentiment_emoji = {"positive": "🟢", "negative": "🔴", "neutral": "🟡", "mixed": "🟣"}.get(sentiment, "⚪")
-            s1.metric("Overall", f"{sentiment_emoji} {sentiment.title()}")
-            s2.metric("Confidence", f"{round(sa.get('confidence', 0) * 100)}%")
-            s3.metric("Positive", f"{round(sa.get('positive_ratio', 0) * 100)}%")
-            s4.metric("Negative", f"{round(sa.get('negative_ratio', 0) * 100)}%")
-
-            # Sentiment donut chart
-            fig = go.Figure(
-                data=[go.Pie(
-                    labels=["Positive", "Negative", "Neutral"],
-                    values=[
-                        sa.get("positive_ratio", 0.33),
-                        sa.get("negative_ratio", 0.33),
-                        sa.get("neutral_ratio", 0.34),
-                    ],
-                    hole=0.6,
-                    marker=dict(colors=["#00e676", "#ff5252", "#ffab40"]),
-                    textfont=dict(color="white", size=13),
-                )]
-            )
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="#eaeaff", family="Inter"),
-                showlegend=True,
-                legend=dict(font=dict(color="#9d9db5")),
-                height=300,
-                margin=dict(t=20, b=20, l=20, r=20),
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-            # Timeline
-            timeline = result.get("timeline", [])
-            if timeline:
-                st.markdown(f"### 📅 Timeline ({len(timeline)} events)")
-                for i, ev in enumerate(timeline, 1):
-                    sent = ev.get("sentiment", "neutral")
-                    css_class = f"sentiment-{sent}"
-                    sig = round(ev.get("significance_score", 0.5) * 100)
-                    st.markdown(
-                        f"""<div class="glass-card">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <strong style="font-size: 1rem;">{ev['headline']}</strong>
-                                <span class="{css_class}" style="text-transform: uppercase; font-size: 0.75rem;">{sent}</span>
-                            </div>
-                            <p style="color: var(--text-secondary); margin: 8px 0 4px 0;">{ev['summary']}</p>
-                            <div style="display: flex; gap: 16px; font-size: 0.8rem; color: var(--text-muted);">
-                                <span>📅 {ev['date']}</span>
-                                <span>⚡ Significance: {sig}%</span>
-                            </div>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
-
-            st.caption(f"Analyzed {result.get('article_count', 0)} articles  •  Model: {result.get('model_used', 'N/A')}")
-
-
-# ------------------------------------------------------------------
-# Vernacular Engine
-# ------------------------------------------------------------------
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# VERNACULAR ENGINE
+# ═══════════════════════════════════════════════════════════════════════════════
 elif page == "🌐 Vernacular Engine":
-    st.markdown('<p class="hero-badge">🌐 Vernacular Engine</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-sub">Culturally adapted translations via AI4Bharat IndicTrans2</p>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
+    st.markdown("""
+    <div class="hero-banner">
+        <p class="hero-title">🌐 Vernacular Business News Engine</p>
+        <p class="hero-sub">Search ET articles, enter a URL, or paste text — then translate with local cultural context.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    LANG_MAP = {
-        "🇮🇳 Hindi": "hi",
-        "🇮🇳 Tamil": "ta",
-        "🇮🇳 Telugu": "te",
-        "🇮🇳 Bengali": "bn",
-        "🇮🇳 Marathi": "mr",
-        "🇮🇳 Gujarati": "gu",
-        "🇮🇳 Kannada": "kn",
-        "🇮🇳 Malayalam": "ml",
-        "🇮🇳 Punjabi": "pa",
-        "🇮🇳 Odia": "or",
+    LANG_OPTIONS = {
+        "🇮🇳 Hindi (हिंदी)": "hi",
+        "🇮🇳 Tamil (தமிழ்)": "ta",
+        "🇮🇳 Telugu (తెలుగు)": "te",
+        "🇮🇳 Bengali (বাংলা)": "bn",
     }
 
-    text_to_translate = st.text_area(
-        "English text to translate",
-        placeholder="Paste a news article or paragraph here…",
-        height=150,
+    # ── Input mode selector ───────────────────────────────────────────────────
+    input_mode = st.radio(
+        "How to find the article",
+        ["🔍 Search ET Articles", "🔗 Article URL", "📝 Paste Text"],
+        horizontal=True,
+        label_visibility="collapsed",
     )
+    st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
-    target_lang_display = st.selectbox("Target Language", list(LANG_MAP.keys()))
-    target_lang_code = LANG_MAP[target_lang_display]
+    # Session state — persist selected article across reruns
+    if "vern_article_text" not in st.session_state:
+        st.session_state["vern_article_text"] = ""
+    if "vern_article_title" not in st.session_state:
+        st.session_state["vern_article_title"] = ""
+    if "vern_search_results" not in st.session_state:
+        st.session_state["vern_search_results"] = []
 
-    if st.button("🌐 Translate", key="translate_btn", disabled=not text_to_translate.strip()):
-        with st.spinner(f"Translating to {target_lang_display}…"):
-            result = _post(
-                "/vernacular/translate",
-                {"text": text_to_translate, "target_language": target_lang_code},
+    # ── Mode 1: Search ET Articles ────────────────────────────────────────────
+    if input_mode == "🔍 Search ET Articles":
+        col_s, col_sb = st.columns([5, 1])
+        with col_s:
+            search_query = st.text_input(
+                "Search ET",
+                placeholder="e.g. RBI rate cut, Infosys earnings, startup funding…",
+                label_visibility="collapsed",
             )
+        with col_sb:
+            do_search = st.button("🔍 Search", use_container_width=True)
 
-        if result:
-            st.markdown("### ✅ Translation")
+        if do_search and search_query.strip():
+            with st.spinner("Searching ET articles…"):
+                try:
+                    r = requests.get(
+                        "http://localhost:8000/api/v1/articles/search",
+                        params={"q": search_query},
+                        timeout=15,
+                    )
+                    r.raise_for_status()
+                    st.session_state["vern_search_results"] = r.json().get("articles", [])
+                    # Clear previous selection when searching
+                    st.session_state["vern_article_text"] = ""
+                    st.session_state["vern_article_title"] = ""
+                except Exception as e:
+                    st.markdown(f'<div class="err-box">Search failed: {e}</div>', unsafe_allow_html=True)
+
+        # Show search results as selectable cards
+        results = st.session_state.get("vern_search_results", [])
+        if results:
+            st.markdown(
+                f'<div style="color:#64748b; font-size:0.8rem; margin-bottom:0.75rem;">'
+                f'{len(results)} articles found — click → to load one</div>',
+                unsafe_allow_html=True,
+            )
+            for art in results:
+                title = art.get("title", "Untitled")
+                summary = art.get("summary", "")[:160]
+                pub = art.get("published", "")[:16]
+                link = art.get("link", "")
+                is_selected = st.session_state.get("vern_article_title") == title
+                border_col = "rgba(99,102,241,0.6)" if is_selected else "rgba(255,255,255,0.07)"
+                bg_col = "rgba(99,102,241,0.08)" if is_selected else "rgba(255,255,255,0.02)"
+
+                col_card, col_pick = st.columns([10, 1])
+                with col_card:
+                    st.markdown(f"""
+                    <div class="glass-card" style="padding:0.85rem 1.1rem; border-color:{border_col}; background:{bg_col}; margin-bottom:0.4rem;">
+                        <div style="font-weight:600; color:#e2e8f0; font-size:0.9rem;">{title}</div>
+                        <div style="color:#64748b; font-size:0.75rem; margin-top:2px;">{pub}</div>
+                        <div style="color:#94a3b8; font-size:0.82rem; margin-top:4px; line-height:1.5;">{summary}…</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_pick:
+                    btn_label = "✓" if is_selected else "→"
+                    if st.button(btn_label, key=f"pick_{link}", use_container_width=True):
+                        with st.spinner("Fetching full article…"):
+                            try:
+                                fr = requests.get(
+                                    "http://localhost:8000/api/v1/articles/fetch",
+                                    params={"url": link},
+                                    timeout=20,
+                                )
+                                fr.raise_for_status()
+                                fetched = fr.json().get("text", "")
+                                st.session_state["vern_article_text"] = fetched if fetched else (
+                                    art.get("title", "") + ". " + art.get("summary", "")
+                                )
+                            except Exception:
+                                st.session_state["vern_article_text"] = (
+                                    art.get("title", "") + ". " + art.get("summary", "")
+                                )
+                            st.session_state["vern_article_title"] = title
+                        st.rerun()
+
+        # Selected article badge
+        if st.session_state.get("vern_article_title"):
+            st.markdown(f"""
+            <div class="glass-card" style="border-color:rgba(99,102,241,0.4); margin-top:0.5rem; padding:0.85rem 1.1rem;">
+                <div style="color:#818cf8; font-size:0.78rem; font-weight:600; text-transform:uppercase; letter-spacing:0.08em;">✅ Selected Article</div>
+                <div style="color:#e2e8f0; font-size:0.9rem; font-weight:500; margin-top:6px;">{st.session_state['vern_article_title']}</div>
+                <div style="color:#64748b; font-size:0.78rem; margin-top:4px;">{len(st.session_state['vern_article_text']):,} characters loaded</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── Mode 2: URL Input ─────────────────────────────────────────────────────
+    elif input_mode == "🔗 Article URL":
+        col_u, col_ub = st.columns([5, 1])
+        with col_u:
+            article_url = st.text_input(
+                "ET Article URL",
+                placeholder="https://economictimes.indiatimes.com/...",
+                label_visibility="collapsed",
+            )
+        with col_ub:
+            fetch_btn = st.button("📥 Fetch", use_container_width=True)
+
+        if fetch_btn and article_url.strip():
+            with st.spinner("Fetching article…"):
+                try:
+                    fr = requests.get(
+                        "http://localhost:8000/api/v1/articles/fetch",
+                        params={"url": article_url.strip()},
+                        timeout=20,
+                    )
+                    fr.raise_for_status()
+                    fd = fr.json()
+                    fetched = fd.get("text", "")
+                    if fetched:
+                        st.session_state["vern_article_text"] = fetched
+                        st.session_state["vern_article_title"] = article_url.strip()
+                        st.success(f"✅ Fetched {fd.get('char_count', len(fetched)):,} characters")
+                    else:
+                        st.error("Could not extract text. Try the Paste Text mode.")
+                except Exception as e:
+                    st.error(f"Fetch failed: {e}")
+
+        if st.session_state.get("vern_article_text"):
+            with st.expander("📄 Preview fetched text", expanded=False):
+                st.caption(st.session_state["vern_article_text"][:600] + "…")
+
+    # ── Mode 3: Paste Text ────────────────────────────────────────────────────
+    elif input_mode == "📝 Paste Text":
+        pasted = st.text_area(
+            "Paste English business text",
+            placeholder="Paste any English business news text here…",
+            height=200,
+            label_visibility="collapsed",
+        )
+        if pasted.strip():
+            st.session_state["vern_article_text"] = pasted.strip()
+            st.session_state["vern_article_title"] = "Pasted text"
+
+    # ── Language selector + Translate button (shared) ─────────────────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    col_lang, col_tbtn = st.columns([3, 1])
+    with col_lang:
+        selected_lang_label = st.selectbox("Target language", list(LANG_OPTIONS.keys()))
+        selected_lang_code = LANG_OPTIONS[selected_lang_label]
+    with col_tbtn:
+        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
+        translate_btn = st.button(
+            "🌐 Translate",
+            use_container_width=True,
+            disabled=not bool(st.session_state.get("vern_article_text")),
+        )
+
+    # ── Translation output ────────────────────────────────────────────────────
+    if translate_btn and st.session_state.get("vern_article_text"):
+        lang_display = selected_lang_label.split("(")[0].strip()
+        with st.spinner(f"Translating to {lang_display}…"):
+            data, err = api_post("/translate", {
+                "text": st.session_state["vern_article_text"][:4000],
+                "target_lang": selected_lang_code,
+            })
+
+        if err:
+            st.markdown(f'<div class="err-box">{err}</div>', unsafe_allow_html=True)
+        elif data:
+            st.markdown('<div class="section-heading">📄 Translation</div>', unsafe_allow_html=True)
             col_orig, col_trans = st.columns(2)
             with col_orig:
-                st.markdown(
-                    f"""<div class="glass-card">
-                        <h4 style="color: var(--text-muted); margin-bottom: 8px;">🇬🇧 English</h4>
-                        <p style="color: var(--text-primary); line-height: 1.7;">{result['original_text']}</p>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
+                st.markdown('<div style="color:#64748b; font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">🇬🇧 Original (English)</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto;">
+                    <div style="color:#cbd5e1; font-size:0.88rem; line-height:1.8;">{data.get('original','')[:1500]}</div>
+                </div>
+                """, unsafe_allow_html=True)
             with col_trans:
-                st.markdown(
-                    f"""<div class="glass-card" style="border-color: var(--accent-primary);">
-                        <h4 style="color: var(--accent-primary); margin-bottom: 8px;">{target_lang_display}</h4>
-                        <p style="color: var(--text-primary); line-height: 1.7; font-size: 1.1rem;">{result['translated_text']}</p>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
+                native = data.get("target_language_native", "")
+                eng = data.get("target_language", "")
+                flag = data.get("flag", "🇮🇳")
+                st.markdown(f'<div style="color:#64748b; font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">{flag} Translated ({eng} · {native})</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto; border-color:rgba(99,102,241,0.35);">
+                    <div style="color:#e2e8f0; font-size:0.95rem; line-height:1.9;">{data.get('improved_translation', data.get('base_translation',''))}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            engine = result.get("engine", "unknown")
-            engine_label = "IndicTrans2" if engine == "indictrans2" else "Gemini (fallback)"
-            st.caption(f"Engine: {engine_label}")
+            context_note = data.get("local_context_note", "")
+            if context_note:
+                st.markdown('<div class="section-heading">📍 Local Context Note</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="glass-card" style="border-color:rgba(251,191,36,0.3);">
+                    <div style="color:#fbbf24; font-size:0.8rem; font-weight:600; margin-bottom:0.5rem;">🗺️ FOR LOCAL READERS</div>
+                    <div style="color:#cbd5e1; font-size:0.9rem; line-height:1.7;">{context_note}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-
-# ------------------------------------------------------------------
-# AI News Video Studio
-# ------------------------------------------------------------------
-
-elif page == "🎬 Video Studio":
-    st.markdown('<p class="hero-badge">🎬 Video Studio</p>', unsafe_allow_html=True)
-    st.markdown(
-        '<p class="hero-sub">Generate 60–120s AI news shorts with Gemini + Veo</p>',
-        unsafe_allow_html=True,
-    )
-    st.write("")
-
-    tab_gen, tab_status = st.tabs(["🎬 Generate", "🔍 Check Status"])
-
-    with tab_gen:
-        with st.form("video_form"):
-            v_title = st.text_input("Article Title", placeholder="e.g. RBI Holds Repo Rate Steady at 6.5%")
-            v_content = st.text_area(
-                "Article Content",
-                placeholder="Paste the full article text here…",
-                height=180,
-            )
-            v_col1, v_col2 = st.columns(2)
-            with v_col1:
-                v_duration = st.slider("Duration (seconds)", 60, 120, 90)
-            with v_col2:
-                v_style = st.selectbox(
-                    "Visual Style",
-                    ["professional_news", "data_driven", "storytelling", "breaking_news"],
-                )
-            v_submit = st.form_submit_button("🎬 Generate Video")
-
-        if v_submit and v_title.strip() and v_content.strip():
-            with st.spinner("Generating script & requesting video…"):
-                result = _post(
-                    "/video-studio/generate",
-                    {
-                        "article_title": v_title,
-                        "article_content": v_content,
-                        "duration_seconds": v_duration,
-                        "style": v_style,
-                    },
-                )
-
-            if result:
-                status = result.get("status", "unknown")
-                gen_id = result.get("generation_id", "")
-
-                if status == "script_only":
-                    st.warning("⚠️ Veo API unavailable — script generated successfully.")
-                elif status == "processing":
-                    st.info(f"🎬 Video generation started! Poll ID: `{gen_id}`")
-                else:
-                    st.success(f"Status: **{status}** — ID: `{gen_id}`")
-
-                # Show script
-                script = result.get("script")
-                if script:
-                    st.markdown("### 📝 Generated Script")
-                    st.markdown(
-                        f"""<div class="glass-card">
-                            <h4 style="color: var(--accent-primary);">🎙️ Narration</h4>
-                            <p style="color: var(--text-primary); line-height: 1.8;">{script['narration']}</p>
-                        </div>""",
-                        unsafe_allow_html=True,
-                    )
-
-                    visuals = script.get("visual_descriptions", [])
-                    if visuals:
-                        st.markdown("#### 🎨 Visual Scenes")
-                        for j, vis in enumerate(visuals, 1):
-                            st.markdown(
-                                f"""<div class="glass-card" style="padding: 12px 18px;">
-                                    <span style="color: var(--accent-primary); font-weight: 700;">Scene {j}:</span>
-                                    <span style="color: var(--text-secondary);"> {vis}</span>
-                                </div>""",
-                                unsafe_allow_html=True,
-                            )
-
-                    st.caption(f"Estimated duration: {script.get('duration_estimate_seconds', v_duration)}s")
-
-    with tab_status:
-        st.markdown("Poll the status of a previously submitted video generation request.")
-        poll_id = st.text_input("Generation ID", placeholder="Paste the generation ID here")
-        if st.button("🔄 Check Status", key="poll_status", disabled=not poll_id.strip()):
-            with st.spinner("Polling…"):
-                result = _get(f"/video-studio/status/{poll_id}")
-            if result:
-                status = result.get("status", "unknown")
-                status_colors = {
-                    "completed": "var(--success)",
-                    "processing": "var(--warning)",
-                    "failed": "var(--danger)",
-                    "pending": "var(--text-muted)",
-                    "script_only": "var(--accent-primary)",
-                }
-                color = status_colors.get(status, "var(--text-secondary)")
-                st.markdown(
-                    f"""<div class="glass-card">
-                        <strong>Status:</strong>
-                        <span style="color: {color}; font-weight: 700; text-transform: uppercase;">{status}</span>
-                        <br/><br/>
-                        <strong>Message:</strong> {result.get('message', 'N/A')}
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-                if result.get("video_url"):
-                    st.markdown(f"🎥 **[Download Video]({result['video_url']})**")
+            glossary = data.get("terminology_glossary", [])
+            if glossary:
+                st.markdown('<div class="section-heading">📚 Business Terminology Glossary</div>', unsafe_allow_html=True)
+                cols = st.columns(min(len(glossary), 3))
+                for i, item in enumerate(glossary):
+                    with cols[i % 3]:
+                        st.markdown(f"""
+                        <div class="gloss-card">
+                            <div class="gloss-term">{item.get('term','')}</div>
+                            <div class="gloss-trans">{item.get('translation','')}</div>
+                            <div class="gloss-exp">{item.get('explanation','')}</div>
+                        </div>
+                        """, unsafe_allow_html=True)

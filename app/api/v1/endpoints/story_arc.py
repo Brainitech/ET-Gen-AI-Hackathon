@@ -1,32 +1,20 @@
-"""
-Story Arc Tracker — Timeline & Sentiment endpoints.
+"""FastAPI endpoint — Story Arc Tracker"""
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from app.services.story_arc_service import build_story_arc
 
-Provides the route for analyzing a topic's story arc, including
-timeline extraction and sentiment analysis powered by Groq/Llama 3.
-"""
-
-from fastapi import APIRouter
-
-from app.models.schemas import StoryArcRequest, StoryArcResponse
-from app.services import story_arc_service
-
-router = APIRouter()
+router = APIRouter(prefix="/story-arc", tags=["Story Arc Tracker"])
 
 
-@router.post(
-    "/analyze",
-    response_model=StoryArcResponse,
-    summary="Analyze a topic's story arc",
-)
-async def analyze_story_arc(
-    request: StoryArcRequest,
-) -> StoryArcResponse:
-    """Analyze a business topic to extract its timeline and sentiment.
+class StoryArcRequest(BaseModel):
+    topic: str
 
-    Retrieves related articles and uses Groq/Llama 3 for structured
-    extraction of events and sentiment analysis.
-    """
-    return await story_arc_service.analyze_story_arc(
-        topic=request.topic,
-        top_k=request.top_k,
-    )
+
+@router.post("")
+def get_story_arc(req: StoryArcRequest):
+    if not req.topic.strip():
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+    result = build_story_arc(req.topic.strip())
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result

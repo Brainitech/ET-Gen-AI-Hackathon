@@ -1,1 +1,1 @@
-# ET-Pulse: AI-Native Business News Platform
+# __init__.py
