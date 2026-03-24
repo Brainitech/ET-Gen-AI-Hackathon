@@ -1,31 +1,30 @@
-# ET Hackathon Round 2 — aether_ai
-# All free / open-source — no paid APIs required
 
-# Web framework
+
+
 fastapi==0.115.7
 uvicorn[standard]==0.32.1
 
-# Frontend
+
 streamlit==1.41.1
 
-# HTTP & HTML parsing
+
 requests==2.32.5
 beautifulsoup4==4.12.3
 feedparser==6.0.11
 
-# AI / NLP (local, no API key needed)
+
 openai==1.57.4
 vaderSentiment==3.3.2
 spacy==3.8.3
 
-# Translation (free, no API key)
+
 deep-translator==1.11.4
 
-# Data & charts
+
 plotly==5.24.1
 pandas==2.2.3
 
-# Utilities
+
 python-dotenv==1.0.1
 pydantic-settings==2.10.1
 httpx==0.28.1
