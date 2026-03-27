@@ -1,4 +1,4 @@
-# ⚡ aether_ai — AI-Native Business News Engine
+
 ### ET Hackathon Round 2 | 100% Free & Open Source
 
 Three AI-powered features built on live Economic Times RSS feeds:
