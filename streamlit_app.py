@@ -240,7 +240,7 @@ section[data-testid="stSidebar"] .stRadio label:hover { color: #e2e8f0; }
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def api_post(endpoint: str, payload: dict):
     try:
-        r = requests.post(f"{API_BASE}{endpoint}", json=payload, timeout=120)
+        r = requests.post(f"{API_BASE}{endpoint}", json=payload, timeout=300)
         r.raise_for_status()
         return r.json(), None
     except requests.exceptions.ConnectionError:
@@ -391,9 +391,10 @@ elif page == "📖 Story Arc Tracker":
             with m1:
                 st.metric("📰 Articles Analysed", data.get("article_count", 0))
             with m2:
-                st.metric("📅 Timeline Events", len(data.get("timeline", [])))
+                st.metric("📡 Data Source", data.get("data_source_badge", ""))
             with m3:
-                st.metric("👥 Key Players", len(data.get("key_players", [])))
+                last_up = data.get("last_updated", "")
+                st.metric("🕒 Last Updated", last_up[:16] if last_up else "Just now")
             with m4:
                 trend = data.get("sentiment_trend", "mixed")
                 st.metric("📊 Sentiment Trend", trend.capitalize())
@@ -485,6 +486,17 @@ elif page == "📖 Story Arc Tracker":
                 </div>
                 """, unsafe_allow_html=True)
 
+            # ── Predictions ───────────────────────────────────────────────
+            predictions = data.get("predictions", "")
+            if predictions:
+                st.markdown('<div class="section-heading">🔮 Predictions & What to Watch</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="glass-card" style="border-color:rgba(99,102,241,0.3);">
+                    <div style="color:#818cf8; font-size:0.85rem; font-weight:600; margin-bottom:0.5rem;">✨ Future Outlook</div>
+                    <div style="color:#cbd5e1; font-size:0.9rem; line-height:1.7;">{predictions}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
     elif generate and not topic.strip():
         st.warning("Please enter a topic to analyse.")
 
@@ -572,6 +584,18 @@ elif page == "📰 News Summarizer":
                     </div>
                     """, unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
+
+            # ── Contextual Impact ─────────────────────────────────────────────
+            impact = data.get("contextual_impact", "")
+            if impact:
+                st.markdown('<div class="section-heading">🌍 Contextual Impact</div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="glass-card" style="border-color:rgba(168,85,247,0.35);">
+                    <div style="color:#e2e8f0; font-size:0.95rem; line-height:1.7;">
+                        {impact}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -745,10 +769,12 @@ elif page == "🌐 Vernacular Engine":
 
     # ── Language selector + Translate button (shared) ─────────────────────────
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-    col_lang, col_tbtn = st.columns([3, 1])
+    col_lang, col_mod, col_tbtn = st.columns([2, 2, 1])
     with col_lang:
         selected_lang_label = st.selectbox("Target language", list(LANG_OPTIONS.keys()))
         selected_lang_code = LANG_OPTIONS[selected_lang_label]
+    with col_mod:
+        selected_model = st.selectbox("Translation Model", ["llama3.1:8b", "aya:8b", "gemma2:9b", "qwen2.5:7b", "mistral:7b"])
     with col_tbtn:
         st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
         translate_btn = st.button(
@@ -760,10 +786,11 @@ elif page == "🌐 Vernacular Engine":
     # ── Translation output ────────────────────────────────────────────────────
     if translate_btn and st.session_state.get("vern_article_text"):
         lang_display = selected_lang_label.split("(")[0].strip()
-        with st.spinner(f"Translating to {lang_display}…"):
+        with st.spinner(f"Translating to {lang_display} using {selected_model}…"):
             data, err = api_post("/translate", {
-                "text": st.session_state["vern_article_text"][:4000],
+                "text": st.session_state["vern_article_text"][:8000],
                 "target_lang": selected_lang_code,
+                "model": selected_model
             })
 
         if err:
@@ -782,7 +809,8 @@ elif page == "🌐 Vernacular Engine":
                 native = data.get("target_language_native", "")
                 eng = data.get("target_language", "")
                 flag = data.get("flag", "🇮🇳")
-                st.markdown(f'<div style="color:#64748b; font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">{flag} Translated ({eng} · {native})</div>', unsafe_allow_html=True)
+                model_used = data.get("model_used", "Unknown model")
+                st.markdown(f'<div style="color:#64748b; font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">{flag} Translated ({eng} · {native}) / <span style="color:#818cf8">{model_used}</span></div>', unsafe_allow_html=True)
                 st.markdown(f"""
                 <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto; border-color:rgba(99,102,241,0.35);">
                     <div style="color:#e2e8f0; font-size:0.95rem; line-height:1.9;">{data.get('improved_translation', data.get('base_translation',''))}</div>

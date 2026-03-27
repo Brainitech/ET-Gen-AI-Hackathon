@@ -1,6 +1,6 @@
 """FastAPI endpoint — Article Search (used by Vernacular Engine)"""
 from fastapi import APIRouter, Query
-from app.services.rss_service import search_articles, fetch_article_text
+from app.services.rss_service import search_articles, fetch_article_text, poll_et_feeds
 
 router = APIRouter(prefix="/articles", tags=["Article Search"])
 
@@ -19,3 +19,9 @@ def fetch(url: str = Query(..., description="Article URL to scrape")):
     if not text:
         return {"error": "Could not fetch article. Try pasting the text directly.", "text": ""}
     return {"text": text, "char_count": len(text)}
+
+@router.get("/pipeline_test")
+def test_pipeline():
+    """Run the hybrid extractor on the RSS feeds."""
+    articles = poll_et_feeds(max_per_feed=1)
+    return {"count": len(articles), "articles": articles}

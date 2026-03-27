@@ -9,9 +9,13 @@ Accepts raw text or a URL, returns:
 """
 import re
 import math
+import concurrent.futures
+import json
+from pydantic import BaseModel, ValidationError
 from typing import Any, Dict, List, Optional
 from app.core.config import get_llm_client
 from app.services.rss_service import fetch_article_text
+from app.services.story_arc_service import _get_spacy
 
 
 CATEGORY_KEYWORDS = {
@@ -62,6 +66,97 @@ def _extractive_fallback(text: str, n_sentences: int = 5) -> List[str]:
     return top
 
 
+class SummarizerSchema(BaseModel):
+    summary: str
+    key_takeaways: List[str]
+    contextual_impact: str
+
+
+def _chunk_text(text: str, chunk_size: int = 2500) -> List[str]:
+    """Break long articles into sentences bounded to chunk_size to maintain semantics."""
+    nlp = _get_spacy()
+    if not nlp:
+        # Fast fallback
+        sents = text.split(". ")
+    else:
+        doc = nlp(text)
+        sents = [s.text for s in doc.sents]
+        
+    chunks = []
+    current_chunk = []
+    current_len = 0
+    for s in sents:
+        if current_len + len(s) > chunk_size and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [s]
+            current_len = len(s)
+        else:
+            current_chunk.append(s)
+            current_len += len(s)
+            
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+        
+    return chunks
+
+
+def _summarize_chunk(chunk: str) -> str:
+    """Map phase: Extract raw bullet points from a single chunk using local LLM."""
+    prompt = f"""Extract bullet points of all critical facts, numbers, names, dates, and actions from this text segment.
+Do not hallucinate or add outside knowledge. Extract verbatim facts only.
+
+TEXT:
+{chunk}"""
+    client, model = get_llm_client()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=600
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception:
+        return ""
+
+
+def _consolidate_summaries(facts: List[str]) -> Dict[str, Any]:
+    """Reduce phase: Combine all chunk-facts into a flawless, zero-hallucination structured JSON."""
+    context = "\n---\n".join(f"CHUNK {i+1} FACTS:\n{f}" for i, f in enumerate(facts) if f.strip())
+    prompt = f"""You are an expert business news editor. Synthesize the following chunked facts extracted from a long article into a cohesive, high-quality news summary.
+DO NOT hallucinate information not explicitly present in these facts. Provide specific numbers and names where available.
+
+FACTS:
+{context}
+
+Respond in this EXACT JSON structure ONLY (no markdown fences):
+{{
+  "summary": "Crisp 3-sentence narrative summary strictly connecting the key facts.",
+  "key_takeaways": [
+    "Fact 1 starting with strong verb", "Fact 2", "Fact 3", "Fact 4", "Fact 5"
+  ],
+  "contextual_impact": "1-2 sentence analysis on why this matters to the broader market/industry, derived strictly from the facts."
+}}"""
+    
+    client, model = get_llm_client()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=800,
+            response_format={"type": "json_object"}
+        )
+        raw = resp.choices[0].message.content.strip()
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        clean = json_match.group(0) if json_match else raw
+        parsed = json.loads(clean)
+        return SummarizerSchema(**parsed).model_dump()
+    except Exception as e:
+        print(f"Map-Reduce Consolidation Error: {e}")
+        return {}
+
+
 def summarize(text: Optional[str] = None, url: Optional[str] = None) -> Dict[str, Any]:
     """
     Main summarization pipeline.
@@ -85,60 +180,33 @@ def summarize(text: Optional[str] = None, url: Optional[str] = None) -> Dict[str
     category = _detect_category(raw_text)
     read_time = _estimate_read_time(raw_text)
 
-    # ── 3. LLM summarization ──────────────────────────────────────────────────
-    # Truncate to ~3000 chars for LLM context efficiency
-    truncated = raw_text[:3500]
+    # ── 3. Map-Reduce Summarization Pipeline ──────────────────────────────────
+    chunks = _chunk_text(raw_text, chunk_size=3000)
+    
+    # ThreadPool for parallel Map Phase execution
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        chunk_facts = list(executor.map(_summarize_chunk, chunks))
 
-    prompt = f"""You are an expert business news editor. Summarize the following article concisely for a busy professional.
+    # Reduce Phase Execution
+    final_output = _consolidate_summaries(chunk_facts)
 
-ARTICLE:
-{truncated}
-
-Respond in this exact JSON format (no markdown fences):
-{{
-  "summary": "A crisp 2-3 sentence abstractive summary covering the who, what, and why.",
-  "key_takeaways": [
-    "Takeaway 1 — specific and actionable",
-    "Takeaway 2 — specific and actionable",
-    "Takeaway 3 — specific and actionable",
-    "Takeaway 4 — specific and actionable",
-    "Takeaway 5 — specific and actionable"
-  ]
-}}
-
-Rules:
-- Summary must be in plain English, no jargon
-- Each takeaway must start with a strong verb or data point
-- Return ONLY the JSON, no extra text"""
-
-    client, model = get_llm_client()
-    summary = ""
-    takeaways: List[str] = []
-
-    try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            max_tokens=600,
-        )
-        raw = resp.choices[0].message.content.strip()
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        import json
-        parsed = json.loads(raw)
-        summary = parsed.get("summary", "")
-        takeaways = parsed.get("key_takeaways", [])
-    except Exception:
-        # Extractive fallback — still useful, just less polished
+    if final_output:
+        summary = final_output.get("summary", "")
+        takeaways = final_output.get("key_takeaways", [])
+        impact = final_output.get("contextual_impact", "")
+    else:
+        # Fallbacks for extreme errors
         fallback_sents = _extractive_fallback(raw_text, n_sentences=3)
         summary = " ".join(fallback_sents[:2])
         takeaways = _extractive_fallback(raw_text, n_sentences=5)
+        impact = "System offline. Contextual analysis unavailable."
 
     return {
         "summary": summary,
         "key_takeaways": takeaways[:5],
+        "contextual_impact": impact,
         "category": category,
         "read_time_min": read_time,
         "char_count": len(raw_text),
+        "chunk_count": len(chunks)
     }

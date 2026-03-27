@@ -10,6 +10,7 @@ router = APIRouter(prefix="/translate", tags=["Vernacular Engine"])
 class TranslateRequest(BaseModel):
     text: str
     target_lang: Literal["hi", "ta", "te", "bn"]
+    model: str = "llama3.1:8b"
 
 
 @router.get("/languages")
@@ -21,7 +22,7 @@ def list_languages():
 def translate(req: TranslateRequest):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
-    result = translate_text(req.text.strip(), req.target_lang)
+    result = translate_text(req.text.strip(), req.target_lang, model_name=req.model)
     if "error" in result:
         raise HTTPException(status_code=422, detail=result["error"])
     return result

@@ -4,8 +4,17 @@ Three AI-native news features: Story Arc Tracker, News Summarizer, Vernacular En
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+import asyncio
 
 from app.api.v1.endpoints import story_arc, summarizer, vernacular, articles
+from app.services.ingestion_service import start_ingestion_worker
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    worker = asyncio.create_task(start_ingestion_worker())
+    yield
+    worker.cancel()
 
 app = FastAPI(
     title="aether_ai — AI-Native News Engine",
@@ -14,6 +23,7 @@ app = FastAPI(
         "Story Arc Tracker · News Summarizer · Vernacular Business News Engine"
     ),
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # CORS — allow Streamlit frontend on any port

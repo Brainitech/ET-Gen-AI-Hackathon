@@ -2,16 +2,19 @@
 aether_ai — Vernacular Business News Engine
 
 Translates English business news into Hindi, Tamil, Telugu, Bengali with:
-  - Accurate base translation via deep-translator (Google Translate, free)
-  - LLM-powered naturalness post-processing (business terminology adaptation)
+  - Base translation via local Ollama indicating high literal translation
+  - LLM-powered naturalness post-processing (business terminology adaptation via chunking map-reduce)
+  - Pre-translation entity protection (RBI, SEBI, etc.)
   - Local cultural context note explaining financial terms to local readers
   - Business terminology glossary extraction
 """
 import re
 import json
-from typing import Any, Dict, List
-from deep_translator import GoogleTranslator
+import concurrent.futures
+from typing import Any, Dict, List, Tuple
+from pydantic import BaseModel
 from app.core.config import get_llm_client
+from app.services.story_arc_service import _get_spacy
 
 SUPPORTED_LANGUAGES = {
     "hi": {"name": "Hindi", "native": "हिंदी", "flag": "🇮🇳"},
@@ -20,97 +23,144 @@ SUPPORTED_LANGUAGES = {
     "bn": {"name": "Bengali", "native": "বাংলা", "flag": "🇮🇳"},
 }
 
-# Common business terms that need cultural adaptation rather than literal translation
-BUSINESS_TERMS = [
-    "mutual fund", "sensex", "nifty", "IPO", "FDI", "FPI", "SEBI", "RBI",
-    "unicorn", "startup", "venture capital", "angel investor", "hedge fund",
-    "NSE", "BSE", "MSME", "GST", "fiscal deficit", "repo rate", "CRR",
-    "inflation", "GDP", "CAGR", "EBITDA", "P/E ratio", "market cap",
-]
+class GlossaryTerm(BaseModel):
+    term: str
+    translation: str
+    explanation: str
 
+class VernacularSchema(BaseModel):
+    improved_translation: str
+    local_context_note: str
+    terminology_glossary: List[GlossaryTerm]
 
-def _translate_base(text: str, target_lang: str) -> str:
-    """Base translation using Google Translate (free, no API key)."""
-    try:
-        translator = GoogleTranslator(source="en", target=target_lang)
-        # Google Translate has a ~5000 char limit per call
-        if len(text) <= 4500:
-            return translator.translate(text)
-        # Chunk for longer texts
-        chunks = [text[i:i+4500] for i in range(0, len(text), 4500)]
-        return " ".join(translator.translate(chunk) for chunk in chunks)
-    except Exception as e:
-        return f"[Translation error: {str(e)}]"
+# ── 1. Entity Protection ──────────────────────────────────────────────────────
+def _protect_entities(text: str) -> Tuple[str, Dict[str, str]]:
+    """Find key financial acronyms and replace them with static mapping tags to prevent malformed translation."""
+    mapping = {}
+    protected_text = text
+    acronyms = ["RBI", "SEBI", "GDP", "IPO", "FDI", "FPI", "NSE", "BSE", "MSME", "GST", "CAGR", "EBITDA"]
+    words = ["Sensex", "Nifty", "Repo Rate", "Reserve Bank"]
+    
+    counter = 1
+    for term in acronyms + words:
+        # Regex to match whole words safely
+        pattern = re.compile(rf'\b{re.escape(term)}\b', re.IGNORECASE)
+        
+        # We process matches one by one to give each a unique tag
+        for match in pattern.finditer(protected_text):
+            tag = f"__ENT_{counter}__"
+            mapping[tag] = match.group(0)
+            protected_text = protected_text.replace(match.group(0), tag, 1)
+            counter += 1
+            
+    return protected_text, mapping
 
+def _restore_entities(text: str, mapping: Dict[str, str]) -> str:
+    """Restore the mapping tags back to original text."""
+    restored = text
+    for tag, original in mapping.items():
+        restored = restored.replace(tag, original)
+    return restored
 
-def _post_process_and_contextualise(
-    original: str,
-    translated: str,
-    target_lang: str,
-) -> Dict[str, Any]:
-    """
-    Use LLM to:
-    1. Make the translation sound natural for business readers
-    2. Generate a local context note
-    3. Extract a terminology glossary
-    """
-    lang_info = SUPPORTED_LANGUAGES.get(target_lang, {"name": target_lang, "native": target_lang})
-    lang_name = lang_info["name"]
+# ── 2. Semantic Chunking ──────────────────────────────────────────────────────
+def _chunk_text_vernacular(text: str, max_chars: int = 1200) -> List[str]:
+    """Segment text by SpaCy sentence boundary to avoid slicing words mid-sentence."""
+    nlp = _get_spacy()
+    if not nlp:
+        # fallback chunking
+        return [text[i:i+max_chars] for i in range(0, len(text), max_chars)]
+    
+    doc = nlp(text)
+    chunks = []
+    current_chunk = []
+    current_len = 0
+    for s in doc.sents:
+        if current_len + len(s.text) > max_chars and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [s.text]
+            current_len = len(s.text)
+        else:
+            current_chunk.append(s.text)
+            current_len += len(s.text)
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
+    return chunks
 
-    # Find which business terms appear in the original
-    found_terms = [t for t in BUSINESS_TERMS if t.lower() in original.lower()]
-    terms_str = ", ".join(found_terms) if found_terms else "general financial terms"
+# ── 3. Base Translation Pass ──────────────────────────────────────────────────
+def _base_translate_chunk(chunk: str, target_lang: str) -> str:
+    """Literal base translation using Ollama map pass."""
+    prompt = f"""You are a professional literal translator. Translate the following English text to {target_lang}. 
+DO NOT translate or alter any placeholder tags formatted like __ENT_1__. Preserve them exactly verbatim.
+Output ONLY the translated text without markdown or conversational prefixes.
 
-    prompt = f"""You are a bilingual business news editor specialising in {lang_name}.
-
-ORIGINAL ENGLISH TEXT:
-{original[:2000]}
-
-RAW MACHINE TRANSLATION ({lang_name}):
-{translated[:2000]}
-
-The text contains these business/financial terms: {terms_str}
-
-Respond in this exact JSON format (no markdown fences):
-{{
-  "improved_translation": "A polished {lang_name} translation that sounds natural to a local business reader. Keep domain-specific English terms like SEBI, RBI, GDP, IPO as-is (they are widely understood). Adapt idioms and phrasing to feel local, not literal.",
-  "local_context_note": "A 2-3 sentence note in English explaining the story with cultural/local context that a {lang_name}-speaking reader in India would appreciate. Mention local relevance, comparison to similar Indian scenarios, or how it affects common people.",
-  "terminology_glossary": [
-    {{"term": "English term", "translation": "{lang_name} translation or transliteration", "explanation": "plain-language explanation in English"}}
-  ]
-}}
-
-Rules:
-- improved_translation must be in {lang_name} script
-- terminology_glossary should cover 3-5 key financial terms from the text
-- Return ONLY the JSON, no extra text"""
-
+TEXT:
+{chunk}"""
     client, model = get_llm_client()
     try:
         resp = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=1200,
+            temperature=0.1,
+            max_tokens=1500
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception:
+        return chunk
+
+# ── 4. Refinement Pass ────────────────────────────────────────────────────────
+def _refine_translation(base_translated: str, mapping: Dict[str, str], target_lang_name: str, model_name: str) -> Dict[str, Any]:
+    """LLM Post-processor: restore tags, smooth grammar, create JSON outputs."""
+    # Restore entities before sending to LLM context
+    restored = _restore_entities(base_translated, mapping)
+    
+    prompt = f"""You are an elite bilingual business news editor for {target_lang_name} audiences in India.
+    
+BASE TRANSLATION (Rough literal format):
+{restored[:8000]}
+
+Your task is to:
+1. Refine the rough base translation into highly fluent, professional journalistic {target_lang_name}. It must read naturally for financial audiences.
+2. Keep specific financial entities (e.g. RBI, SEBI, GDP, Nifty, Sensex) intact.
+3. Formulate a short "local_context_note" in English explaining why this news matters to local readers.
+4. Extract a terminology glossary of 3-5 financial terms used.
+
+Respond STRICTLY in this JSON format ONLY (No markdown fences):
+{{
+  "improved_translation": "The entire refined fluent text strictly in {target_lang_name} script.",
+  "local_context_note": "2-sentence cultural or economic context note in English.",
+  "terminology_glossary": [
+    {{"term": "English Term", "translation": "{target_lang_name} equivalent", "explanation": "English definition"}}
+  ]
+}}"""
+
+    client, _ = get_llm_client()
+    try:
+        resp = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            max_tokens=3000,
+            response_format={"type": "json_object"}
         )
         raw = resp.choices[0].message.content.strip()
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        parsed = json.loads(raw)
-        return parsed
-    except Exception:
-        # Fallback: return base translation without LLM enhancement
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        clean = json_match.group(0) if json_match else raw
+        parsed = json.loads(clean)
+        # Validate deterministic shapes via Pydantic
+        validated = VernacularSchema(**parsed)
+        return validated.model_dump()
+    except Exception as e:
+        print(f"Vernacular Refinement Error: {str(e)}")
         return {
-            "improved_translation": translated,
-            "local_context_note": "LLM post-processing unavailable — showing base machine translation.",
-            "terminology_glossary": [],
+            "improved_translation": restored,
+            "local_context_note": "Refinement unavailable.",
+            "terminology_glossary": []
         }
 
-
-def translate_text(text: str, target_lang: str) -> Dict[str, Any]:
+# ── 5. Main Orchestrator ──────────────────────────────────────────────────────
+def translate_text(text: str, target_lang: str, model_name: str = "llama3.1:8b") -> Dict[str, Any]:
     """
-    Full vernacular translation pipeline.
-    Returns: translated text, local context note, terminology glossary.
+    Full vernacular translation pipeline using a dual-pass Ollama architecture.
     """
     if target_lang not in SUPPORTED_LANGUAGES:
         return {"error": f"Unsupported language '{target_lang}'. Choose: hi, ta, te, bn"}
@@ -119,20 +169,32 @@ def translate_text(text: str, target_lang: str) -> Dict[str, Any]:
         return {"error": "Text too short to translate."}
 
     lang_info = SUPPORTED_LANGUAGES[target_lang]
-
-    # Step 1: Base machine translation
-    base_translation = _translate_base(text.strip(), target_lang)
-
-    # Step 2: LLM post-processing for naturalness + context
-    llm_result = _post_process_and_contextualise(text.strip(), base_translation, target_lang)
+    lang_name = lang_info["name"]
+    
+    # 1. Protect Entities
+    protected_text, mapping = _protect_entities(text.strip())
+    
+    # 2. Chunk English Content safely
+    chunks = _chunk_text_vernacular(protected_text)
+    
+    # 3. Base Translation Pass (Map)
+    base_results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        base_results = list(executor.map(lambda c: _base_translate_chunk(c, lang_name), chunks))
+    
+    full_base_translated = " ".join(base_results)
+    
+    # 4. Refinement Pass (Reduce)
+    llm_result = _refine_translation(full_base_translated, mapping, lang_name, model_name)
 
     return {
         "original": text.strip(),
-        "target_language": lang_info["name"],
+        "target_language": lang_name,
         "target_language_native": lang_info["native"],
         "flag": lang_info["flag"],
-        "base_translation": base_translation,
-        "improved_translation": llm_result.get("improved_translation", base_translation),
+        "model_used": model_name,
+        "base_translation": full_base_translated,
+        "improved_translation": llm_result.get("improved_translation", ""),
         "local_context_note": llm_result.get("local_context_note", ""),
         "terminology_glossary": llm_result.get("terminology_glossary", []),
     }

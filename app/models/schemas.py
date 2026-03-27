@@ -219,6 +219,12 @@ class TranslationRequest(BaseModel):
     )
 
 
+class GlossaryTerm(BaseModel):
+    term: str
+    translation: str
+    explanation: str
+
+
 class TranslationResponse(BaseModel):
     """Translation result."""
 
@@ -226,7 +232,9 @@ class TranslationResponse(BaseModel):
     translated_text: str
     source_language: str = "en"
     target_language: str
-    engine: str = "indictrans2"
+    engine: str = "llm-dual-pass"
+    local_context_note: str = ""
+    terminology_glossary: list[GlossaryTerm] = Field(default_factory=list)
 
 
 # ================================================================
