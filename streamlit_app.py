@@ -1,7 +1,6 @@
 """
-ET_Intelligence — Unified Streamlit Frontend
-ET Hackathon Round 2 | All features in one app
-My ET · Story Arc Tracker · News Summarizer · Vernacular Engine
+ET_Intelligence — Unified Streamlit Frontend (Revamped UI v2)
+ET Hackathon Round 2 | My ET · Story Arc Tracker · News Summarizer · Vernacular Engine
 """
 
 import re as _re
@@ -11,9 +10,9 @@ import plotly.graph_objects as go
 import pandas as pd
 import uuid
 
-# ── Page Configuration ─────────────────────────────────────────────────────────
+# ── Page Config ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="ET_Intelligence — AI-Native Business News",
+    page_title="ET_Intelligence",
     page_icon="📰",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -21,178 +20,498 @@ st.set_page_config(
 
 API_BASE = "http://localhost:8000/api/v1"
 
-# ── Global CSS — ET Dark Red Theme ─────────────────────────────────────────────
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+# ── Session State Defaults ────────────────────────────────────────────────────
+defaults = {
+    "dark_mode": True,
+    "my_et_page": "onboarding",
+    "user_id": str(uuid.uuid4()),
+    "profile": {},
+    "persona": None,
+    "briefing": None,
+    "deep_dive_article": None,
+    "vern_article_text": "",
+    "vern_article_title": "",
+    "vern_search_results": [],
+    "home_articles": None,
+    "home_category_filter": "All",
+    "prefill_story_arc": "",
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-.stApp { background: #0d0d0d; color: #e8e0d5; }
+# ── Theme CSS Injection ────────────────────────────────────────────────────────
+IS_DARK = st.session_state.dark_mode
 
+DARK_VARS = """
+    --bg-0: #080808;
+    --bg-1: #111111;
+    --bg-2: #181818;
+    --bg-3: #232323;
+    --border: #2c2c2c;
+    --border-accent: rgba(196,30,58,0.35);
+    --text-1: #f0ebe4;
+    --text-2: #8a8278;
+    --text-3: #4a4a4a;
+    --accent: #C41E3A;
+    --accent-hover: #e02244;
+    --accent-dim: rgba(196,30,58,0.10);
+    --accent-glow: rgba(196,30,58,0.22);
+    --positive: #4ade80;
+    --positive-dim: rgba(74,222,128,0.10);
+    --negative: #f87171;
+    --negative-dim: rgba(248,113,113,0.10);
+    --warning: #fbbf24;
+    --warning-dim: rgba(251,191,36,0.10);
+    --gold: #e0b84a;
+    --sidebar-bg: #0c0c0c;
+    --header-gradient: linear-gradient(135deg, #6a0000 0%, #9e1a1a 60%, #6a0000 100%);
+    --card-shadow: 0 2px 10px rgba(0,0,0,0.45);
+    --card-shadow-hover: 0 6px 24px rgba(0,0,0,0.55), 0 0 0 1px rgba(196,30,58,0.18);
+    --input-bg: #1e1e1e;
+    --metric-border-top: #C41E3A;
+    --scrollbar-thumb: #333;
+"""
+
+LIGHT_VARS = """
+    --bg-0: #f4f1ee;
+    --bg-1: #ffffff;
+    --bg-2: #faf8f6;
+    --bg-3: #f0ece8;
+    --border: #e4deda;
+    --border-accent: rgba(196,30,58,0.22);
+    --text-1: #1a1714;
+    --text-2: #6b6360;
+    --text-3: #aaa6a2;
+    --accent: #b81c36;
+    --accent-hover: #961630;
+    --accent-dim: rgba(184,28,54,0.07);
+    --accent-glow: rgba(184,28,54,0.14);
+    --positive: #15803d;
+    --positive-dim: rgba(21,128,61,0.08);
+    --negative: #b91c1c;
+    --negative-dim: rgba(185,28,28,0.08);
+    --warning: #b45309;
+    --warning-dim: rgba(180,83,9,0.08);
+    --gold: #92660a;
+    --sidebar-bg: #ede9e4;
+    --header-gradient: linear-gradient(135deg, #8a0000 0%, #c41e3a 60%, #8a0000 100%);
+    --card-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    --card-shadow-hover: 0 4px 18px rgba(0,0,0,0.11), 0 0 0 1px rgba(196,30,58,0.12);
+    --input-bg: #f8f5f2;
+    --metric-border-top: #b81c36;
+    --scrollbar-thumb: #c8c2bc;
+"""
+
+COMMON_CSS = """
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, [class*="css"] {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    color: var(--text-1);
+    -webkit-font-smoothing: antialiased;
+}
+
+.stApp { background: var(--bg-0) !important; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background: #0a0a0a;
-    border-right: 1px solid #1e1e1e;
+    background: var(--sidebar-bg) !important;
+    border-right: 1px solid var(--border) !important;
 }
+section[data-testid="stSidebar"] > div { padding-top: 0 !important; }
 section[data-testid="stSidebar"] .stRadio label {
-    color: #888; font-size: 0.9rem; transition: color 0.2s;
+    color: var(--text-2) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    padding: 0.3rem 0 !important;
+    transition: color 0.18s;
 }
-section[data-testid="stSidebar"] .stRadio label:hover { color: #e8e0d5; }
+section[data-testid="stSidebar"] .stRadio label:hover { color: var(--text-1) !important; }
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+    color: var(--text-2) !important;
+    font-size: 0.8rem !important;
+}
 
+/* ── Header Bar ── */
 .et-header {
-    background: linear-gradient(135deg, #8B0000 0%, #B22222 50%, #8B0000 100%);
-    padding: 0.75rem 2rem;
+    background: var(--header-gradient);
+    padding: 0.9rem 2rem;
     display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 3px solid #FF4444;
+    border-bottom: 2px solid var(--accent);
     margin: -1rem -1rem 2rem -1rem;
 }
 .et-logo {
     font-family: 'Playfair Display', serif;
-    font-size: 1.8rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.02em;
+    font-size: 1.65rem; font-weight: 800; color: #fff; letter-spacing: -0.01em;
 }
-.et-logo span { color: #FFD700; }
+.et-logo span { color: var(--gold); }
 .et-tagline {
-    color: rgba(255,255,255,0.75); font-size: 0.78rem;
-    font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase;
+    color: rgba(255,255,255,0.58); font-size: 0.68rem;
+    font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase;
 }
 
+/* ── Hero Banner ── */
 .hero-banner {
-    background: linear-gradient(135deg, rgba(139,0,0,0.25) 0%, rgba(178,34,34,0.12) 50%, rgba(139,0,0,0.2) 100%);
-    border: 1px solid rgba(178,34,34,0.4); border-left: 5px solid #B22222;
-    border-radius: 16px; padding: 2rem 2.5rem; margin-bottom: 2rem;
-    position: relative; overflow: hidden;
-}
-.hero-banner::before {
-    content: ''; position: absolute; top: -60px; right: -60px;
-    width: 200px; height: 200px;
-    background: radial-gradient(circle, rgba(178,34,34,0.15) 0%, transparent 70%);
-    pointer-events: none;
+    background: var(--accent-dim);
+    border: 1px solid var(--border-accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px; padding: 1.6rem 2rem; margin-bottom: 1.75rem;
 }
 .hero-title {
     font-family: 'Playfair Display', serif;
-    font-size: 2.4rem; font-weight: 800; color: #FFFFFF; margin: 0; line-height: 1.1;
+    font-size: 1.85rem; font-weight: 800; color: var(--text-1);
+    line-height: 1.15; margin: 0;
 }
-.hero-sub { color: #999; font-size: 1rem; margin-top: 0.6rem; }
+.hero-sub { color: var(--text-2); font-size: 0.9rem; margin-top: 0.45rem; line-height: 1.5; }
 
+/* ── Section Heading ── */
+.section-heading {
+    display: flex; align-items: center; gap: 0.45rem;
+    font-size: 0.68rem; font-weight: 700; color: var(--text-1);
+    text-transform: uppercase; letter-spacing: 0.18em;
+    margin: 1.75rem 0 0.9rem;
+    padding: 0.45rem 0.85rem;
+    background: var(--accent-dim); border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+}
+.section-label {
+    font-size: 0.67rem; font-weight: 700; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.16em;
+    margin-bottom: 0.7rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border);
+}
+
+/* ── Glass Card ── */
 .glass-card {
-    background: #141414; border: 1px solid #252525; border-radius: 14px;
-    padding: 1.5rem; margin-bottom: 1rem;
-    transition: border-color 0.25s, box-shadow 0.25s, transform 0.15s;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.2rem 1.4rem; margin-bottom: 0.9rem;
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
 }
 .glass-card:hover {
-    border-color: rgba(178,34,34,0.5);
-    box-shadow: 0 4px 24px rgba(139,0,0,0.12), 0 1px 4px rgba(0,0,0,0.4);
+    border-color: var(--border-accent);
+    box-shadow: var(--card-shadow-hover);
     transform: translateY(-1px);
 }
 
-.section-heading {
-    display: flex; align-items: center; gap: 0.6rem;
-    font-size: 0.78rem; font-weight: 700; color: #e8e0d5;
-    text-transform: uppercase; letter-spacing: 0.18em;
-    margin: 2rem 0 1rem; padding: 0.6rem 1rem;
-    background: linear-gradient(90deg, rgba(139,0,0,0.2) 0%, rgba(139,0,0,0.05) 100%);
-    border-left: 3px solid #B22222; border-radius: 0 8px 8px 0;
+/* ── Badges ── */
+.badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 0.18rem 0.6rem; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
 }
-.section-label {
-    font-size: 0.72rem; font-weight: 700; color: #555;
-    text-transform: uppercase; letter-spacing: 0.15em;
-    margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #1e1e1e;
+.badge-positive { background: var(--positive-dim); color: var(--positive); border: 1px solid rgba(74,222,128,0.2); }
+.badge-negative { background: var(--negative-dim); color: var(--negative); border: 1px solid rgba(248,113,113,0.2); }
+.badge-neutral  { background: var(--bg-3); color: var(--text-2); border: 1px solid var(--border); }
+.badge-rising   { background: var(--positive-dim); color: var(--positive); border: 1px solid rgba(74,222,128,0.2); }
+.badge-falling  { background: var(--negative-dim); color: var(--negative); border: 1px solid rgba(248,113,113,0.2); }
+.badge-mixed    { background: var(--warning-dim); color: var(--warning); border: 1px solid rgba(251,191,36,0.2); }
+.badge-stable   { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--border-accent); }
+
+/* ── Timeline ── */
+.timeline-item {
+    display: flex; gap: 0.8rem; align-items: flex-start;
+    padding: 0.7rem 1rem; margin-bottom: 0.6rem;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 10px; transition: border-color 0.18s;
 }
+.timeline-item:hover { border-color: var(--border-accent); }
+.timeline-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0; margin-top: 5px;
+    box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.timeline-dot-high   { background: var(--negative); box-shadow: 0 0 0 3px var(--negative-dim); }
+.timeline-dot-medium { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-dim); }
+.timeline-dot-low    { background: var(--positive); box-shadow: 0 0 0 3px var(--positive-dim); }
 
-.badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
-.badge-positive { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
-.badge-negative { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
-.badge-neutral  { background: rgba(148,163,184,0.12); color: #888; border: 1px solid rgba(148,163,184,0.2); }
-.badge-rising   { background: rgba(34,197,94,0.12); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
-.badge-falling  { background: rgba(239,68,68,0.12); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
-.badge-mixed    { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
-.badge-stable   { background: rgba(139,0,0,0.15); color: #B22222; border: 1px solid rgba(178,34,34,0.3); }
+/* ── Player Card ── */
+.player-card {
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+    border-radius: 10px; padding: 0.7rem 0.95rem; margin-bottom: 0.5rem;
+    transition: border-color 0.18s, background 0.18s;
+}
+.player-card:hover { border-color: var(--accent); }
+.player-name { font-weight: 600; color: var(--text-1); font-size: 0.9rem; }
+.player-role { color: var(--text-2); font-size: 0.78rem; margin-top: 2px; }
 
-.timeline-item { display: flex; gap: 1rem; margin-bottom: 0.75rem; align-items: flex-start; }
-.timeline-dot { width: 10px; height: 10px; border-radius: 50%; background: #B22222; margin-top: 5px; flex-shrink: 0; box-shadow: 0 0 8px rgba(178,34,34,0.5); }
-.timeline-dot-high   { background: #f87171; box-shadow: 0 0 8px rgba(248,113,113,0.5); }
-.timeline-dot-medium { background: #fbbf24; box-shadow: 0 0 8px rgba(251,191,36,0.5); }
-.timeline-dot-low    { background: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.5); }
-
-.player-card { background: rgba(139,0,0,0.05); border: 1px solid rgba(178,34,34,0.2); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
-.player-name { font-weight: 600; color: #e8e0d5; font-size: 0.95rem; }
-.player-role { color: #666; font-size: 0.82rem; margin-top: 2px; }
-
-.takeaway { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid #1e1e1e; }
+/* ── Takeaways ── */
+.takeaway {
+    display: flex; align-items: flex-start; gap: 0.7rem;
+    padding: 0.6rem 0; border-bottom: 1px solid var(--border);
+}
 .takeaway:last-child { border-bottom: none; }
-.takeaway-bullet { color: #B22222; font-weight: 700; font-size: 1rem; flex-shrink: 0; }
-.takeaway-text { color: #ccc; font-size: 0.9rem; line-height: 1.5; }
+.takeaway-bullet { color: var(--accent); font-weight: 700; font-size: 0.95rem; flex-shrink: 0; line-height: 1.6; }
+.takeaway-text { color: var(--text-2); font-size: 0.87rem; line-height: 1.6; }
 
-.gloss-card { background: rgba(139,0,0,0.05); border: 1px solid rgba(178,34,34,0.2); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
-.gloss-term { font-weight: 600; color: #B22222; font-size: 0.9rem; }
-.gloss-trans { color: #e8e0d5; font-size: 0.9rem; }
-.gloss-exp { color: #666; font-size: 0.82rem; margin-top: 4px; }
-
-.persona-card { background: #1a1a1a; border: 2px solid #2a2a2a; border-radius: 14px; padding: 1.5rem; cursor: pointer; transition: all 0.2s; text-align: center; }
-.persona-card:hover { border-color: #8B0000; }
-.persona-card.selected { border-color: #B22222; background: rgba(139,0,0,0.12); box-shadow: 0 0 20px rgba(178,34,34,0.2); }
-.persona-icon { font-size: 2.2rem; margin-bottom: 0.5rem; }
-.persona-name { font-weight: 700; font-size: 1rem; color: #fff; margin-bottom: 0.25rem; }
-.persona-desc { color: #666; font-size: 0.8rem; line-height: 1.5; }
-
-.news-card { background: #141414; border: 1px solid #252525; border-left: 4px solid #8B0000; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s; }
-.news-card:hover { border-left-color: #FF4444; box-shadow: 0 4px 24px rgba(139,0,0,0.18), inset 0 0 0 1px rgba(178,34,34,0.1); transform: translateX(2px); }
-.news-meta { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-.news-source { font-size: 0.72rem; font-weight: 700; color: #B22222; text-transform: uppercase; letter-spacing: 0.1em; }
-.news-time { color: #555; font-size: 0.72rem; }
-.news-title { font-size: 1.05rem; font-weight: 600; color: #e8e0d5; line-height: 1.4; margin-bottom: 0.5rem; }
-.news-summary { color: #666; font-size: 0.85rem; line-height: 1.6; margin-bottom: 0.75rem; }
-
-/* Home feed card */
-.home-news-card {
-    background: #111; border: 1px solid #1e1e1e; border-left: 3px solid #8B0000;
-    border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 0.65rem;
-    transition: border-color 0.2s, background 0.2s;
+/* ── Glossary ── */
+.gloss-card {
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+    border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.5rem;
 }
-.home-news-card:hover { border-left-color: #FF4444; background: #161616; }
+.gloss-term { font-weight: 700; color: var(--accent); font-size: 0.85rem; margin-bottom: 2px; }
+.gloss-trans { color: var(--text-1); font-size: 0.85rem; }
+.gloss-exp { color: var(--text-2); font-size: 0.78rem; margin-top: 4px; }
+
+/* ── Persona Cards (Onboarding) ── */
+.persona-card {
+    background: var(--bg-2); border: 2px solid var(--border);
+    border-radius: 14px; padding: 1.5rem 1rem;
+    cursor: pointer; transition: all 0.2s ease; text-align: center;
+}
+.persona-card:hover { border-color: var(--accent); box-shadow: var(--card-shadow-hover); }
+.persona-card.selected {
+    border-color: var(--accent); background: var(--accent-dim);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.persona-icon { font-size: 1.9rem; margin-bottom: 0.55rem; display: block; }
+.persona-name { font-weight: 700; font-size: 0.92rem; color: var(--text-1); margin-bottom: 0.3rem; }
+.persona-desc { color: var(--text-2); font-size: 0.76rem; line-height: 1.5; }
+
+/* ── Home News Cards ── */
+.home-news-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 10px;
+    padding: 0.95rem 1.1rem; margin-bottom: 0.7rem;
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+}
+.home-news-card:hover {
+    border-left-color: var(--accent-hover);
+    background: var(--bg-3); box-shadow: var(--card-shadow-hover);
+}
 .home-cat-pill {
-    display: inline-block; background: rgba(139,0,0,0.18);
-    border: 1px solid rgba(178,34,34,0.3); color: #B22222;
-    font-size: 0.65rem; font-weight: 700; padding: 2px 8px;
+    display: inline-block; background: var(--accent-dim);
+    border: 1px solid var(--border-accent); color: var(--accent);
+    font-size: 0.62rem; font-weight: 700; padding: 2px 8px;
     border-radius: 999px; text-transform: uppercase; letter-spacing: 0.08em; margin-right: 0.4rem;
 }
-.home-news-title { font-size: 0.97rem; font-weight: 600; color: #e8e0d5; line-height: 1.4; margin: 0.35rem 0 0.4rem; }
-.home-news-summary { color: #5a5a5a; font-size: 0.82rem; line-height: 1.55; }
-.home-news-time { color: #444; font-size: 0.7rem; }
+.home-news-title { font-size: 0.93rem; font-weight: 600; color: var(--text-1); line-height: 1.4; margin: 0.3rem 0 0.38rem; }
+.home-news-summary { color: var(--text-2); font-size: 0.81rem; line-height: 1.55; }
+.home-news-time { color: var(--text-3); font-size: 0.68rem; }
 
-.ai-snippet { background: linear-gradient(135deg, rgba(139,0,0,0.12) 0%, rgba(139,0,0,0.06) 100%); border: 1px solid rgba(178,34,34,0.35); border-left: 3px solid #B22222; border-radius: 8px; padding: 0.85rem 1rem; margin-top: 0.85rem; }
-.ai-snippet-label { font-size: 0.65rem; font-weight: 700; color: #B22222; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 4px; }
-.ai-snippet-text { color: #d4ccc4; font-size: 0.9rem; line-height: 1.65; font-style: italic; }
+/* ── My ET Feed Cards ── */
+.news-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-left: 4px solid var(--accent); border-radius: 12px;
+    padding: 1.2rem 1.4rem; margin-bottom: 0.9rem;
+    box-shadow: var(--card-shadow);
+    transition: border-color 0.18s, box-shadow 0.18s, transform 0.15s;
+}
+.news-card:hover { border-left-color: var(--accent-hover); box-shadow: var(--card-shadow-hover); transform: translateX(2px); }
+.news-meta { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.45rem; flex-wrap: wrap; }
+.news-source { font-size: 0.68rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; }
+.news-time { color: var(--text-3); font-size: 0.68rem; }
+.news-title { font-size: 1rem; font-weight: 600; color: var(--text-1); line-height: 1.4; margin-bottom: 0.45rem; }
+.news-summary { color: var(--text-2); font-size: 0.83rem; line-height: 1.6; margin-bottom: 0.7rem; }
 
-.tag { display: inline-block; background: #1e1e1e; border: 1px solid #2a2a2a; color: #888; font-size: 0.7rem; font-weight: 500; padding: 0.2rem 0.6rem; border-radius: 999px; margin-right: 0.35rem; text-transform: uppercase; letter-spacing: 0.06em; }
+/* ── AI Snippet ── */
+.ai-snippet {
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+    border-left: 3px solid var(--accent); border-radius: 8px; padding: 0.8rem 0.95rem; margin-top: 0.8rem;
+}
+.ai-snippet-label {
+    font-size: 0.6rem; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 0.3rem; display: block;
+}
+.ai-snippet-text { color: var(--text-1); font-size: 0.86rem; line-height: 1.65; font-style: italic; }
 
-.dot-positive { color: #4ade80; }
-.dot-negative { color: #f87171; }
-.dot-neutral  { color: #888; }
+/* ── Tags ── */
+.tag {
+    display: inline-block; background: var(--bg-3); border: 1px solid var(--border);
+    color: var(--text-2); font-size: 0.65rem; font-weight: 500;
+    padding: 0.16rem 0.52rem; border-radius: 999px;
+    margin-right: 0.28rem; text-transform: uppercase; letter-spacing: 0.05em;
+}
 
-.deep-dive-section { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
-.deep-dive-heading { font-size: 0.8rem; font-weight: 700; color: #B22222; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; }
-.deep-dive-content { color: #ccc; font-size: 0.9rem; line-height: 1.7; }
-.bottom-line { background: linear-gradient(135deg, rgba(139,0,0,0.2), rgba(178,34,34,0.1)); border: 1px solid rgba(178,34,34,0.4); border-radius: 10px; padding: 1rem 1.25rem; margin-top: 1rem; }
-.bottom-line-label { font-size: 0.72rem; font-weight: 700; color: #FFD700; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.3rem; }
-.bottom-line-text { color: #fff; font-size: 0.95rem; font-weight: 500; line-height: 1.5; }
+/* ── Sentiment Dots ── */
+.dot-positive { color: var(--positive); font-size: 0.7rem; }
+.dot-negative { color: var(--negative); font-size: 0.7rem; }
+.dot-neutral  { color: var(--text-3); font-size: 0.7rem; }
 
-.err-box { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 1rem; color: #fca5a5; }
-.info-box { background: rgba(139,0,0,0.07); border: 1px solid rgba(178,34,34,0.2); border-radius: 10px; padding: 1rem; color: #ccc; }
+/* ── Deep Dive ── */
+.deep-dive-section {
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.2rem; margin-bottom: 0.7rem; transition: border-color 0.18s;
+}
+.deep-dive-section:hover { border-color: var(--border-accent); }
+.deep-dive-heading { font-size: 0.7rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; }
+.deep-dive-content { color: var(--text-1); font-size: 0.86rem; line-height: 1.7; }
+.bottom-line {
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+    border-radius: 10px; padding: 1rem 1.2rem; margin-top: 1rem;
+}
+.bottom-line-label { font-size: 0.65rem; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.3rem; display: block; }
+.bottom-line-text { color: var(--text-1); font-size: 0.92rem; font-weight: 600; line-height: 1.5; }
 
-.stButton>button { background: linear-gradient(135deg, #8B0000, #B22222) !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; font-family: 'Inter', sans-serif !important; transition: opacity 0.2s !important; }
-.stButton>button:hover { opacity: 0.85 !important; }
+/* ── Info / Error Boxes ── */
+.err-box {
+    background: var(--negative-dim); border: 1px solid rgba(248,113,113,0.25);
+    border-radius: 10px; padding: 0.9rem 1rem; color: var(--negative); font-size: 0.85rem;
+}
+.info-box {
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+    border-radius: 10px; padding: 0.9rem 1rem; color: var(--text-2); font-size: 0.85rem;
+}
+.success-box {
+    background: var(--positive-dim); border: 1px solid rgba(74,222,128,0.25);
+    border-radius: 10px; padding: 0.9rem 1rem; color: var(--positive); font-size: 0.85rem;
+}
 
-.stTextInput input, .stTextArea textarea, .stSelectbox select, .stMultiSelect [data-baseweb] { background: #1a1a1a !important; border-color: #2a2a2a !important; color: #e8e0d5 !important; border-radius: 8px !important; }
-div[data-testid="stRadio"] label { color: #aaa !important; }
-.stSpinner { color: #B22222 !important; }
-.stMetric { background: linear-gradient(135deg, #1a1a1a 0%, #141414 100%); border: 1px solid #252525; border-top: 2px solid #8B0000; border-radius: 12px; padding: 1rem 1.25rem; }
-section[data-testid="stSidebar"] details { border: 1px solid #1e1e1e !important; border-radius: 8px !important; background: #111 !important; }
-section[data-testid="stSidebar"] details summary { color: #666 !important; font-size: 0.8rem !important; font-weight: 600 !important; padding: 0.5rem 0 !important; }
-</style>
-""", unsafe_allow_html=True)
+/* ── Buttons ── */
+.stButton > button {
+    background: linear-gradient(135deg, #8a0000, var(--accent)) !important;
+    color: #fff !important; border: none !important; border-radius: 8px !important;
+    font-family: 'DM Sans', sans-serif !important; font-weight: 600 !important; font-size: 0.84rem !important;
+    transition: opacity 0.18s, transform 0.1s, box-shadow 0.18s !important;
+    box-shadow: 0 2px 8px var(--accent-glow) !important; letter-spacing: 0.01em !important;
+}
+.stButton > button:hover { opacity: 0.88 !important; transform: translateY(-1px) !important; box-shadow: 0 4px 14px var(--accent-glow) !important; }
+.stButton > button:active { transform: translateY(0) !important; }
 
+/* ── Inputs ── */
+.stTextInput input, .stTextArea textarea {
+    background: var(--input-bg) !important; border: 1px solid var(--border) !important;
+    color: var(--text-1) !important; border-radius: 8px !important;
+    font-family: 'DM Sans', sans-serif !important; font-size: 0.9rem !important;
+    transition: border-color 0.18s !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus {
+    border-color: var(--accent) !important; box-shadow: 0 0 0 2px var(--accent-dim) !important; outline: none !important;
+}
+.stTextInput input::placeholder, .stTextArea textarea::placeholder { color: var(--text-3) !important; }
+.stSelectbox > div > div, .stMultiSelect > div > div {
+    background: var(--input-bg) !important; border: 1px solid var(--border) !important;
+    border-radius: 8px !important; color: var(--text-1) !important;
+}
+.stSelectbox [data-baseweb="select"] { background: var(--input-bg) !important; }
 
-# ── Shared Helpers ─────────────────────────────────────────────────────────────
+/* ── Radio ── */
+div[data-testid="stRadio"] label { color: var(--text-1) !important; font-family: 'DM Sans', sans-serif !important; }
+
+/* ── Metrics ── */
+[data-testid="metric-container"] {
+    background: var(--bg-2) !important; border: 1px solid var(--border) !important;
+    border-top: 2px solid var(--accent) !important; border-radius: 10px !important;
+    padding: 0.85rem 1rem !important; box-shadow: var(--card-shadow) !important;
+}
+[data-testid="stMetricValue"] { color: var(--text-1) !important; font-weight: 700 !important; font-family: 'DM Sans', sans-serif !important; }
+[data-testid="stMetricLabel"] { color: var(--text-2) !important; font-size: 0.75rem !important; font-weight: 600 !important; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* ── Expander ── */
+details { border: 1px solid var(--border) !important; border-radius: 10px !important; background: var(--bg-2) !important; }
+details summary { color: var(--text-2) !important; font-size: 0.84rem !important; font-weight: 600 !important; font-family: 'DM Sans', sans-serif !important; padding: 0.6rem 0 !important; }
+
+/* ── Spinner ── */
+.stSpinner > div { border-top-color: var(--accent) !important; }
+
+/* ── Divider ── */
+hr { border-color: var(--border) !important; margin: 0.75rem 0 !important; }
+
+/* ── Sidebar logo block ── */
+.sidebar-brand {
+    padding: 1.2rem 1rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.75rem;
+}
+.sidebar-brand-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem; font-weight: 800; color: var(--text-1); line-height: 1;
+}
+.sidebar-brand-name span { color: var(--accent); }
+.sidebar-badge {
+    display: inline-block; margin-top: 5px;
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+    color: var(--accent); font-size: 0.6rem; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px;
+}
+
+/* ── Category filter pills ── */
+.cat-pill {
+    display: inline-block; padding: 5px 14px;
+    border-radius: 8px; font-size: 0.73rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; text-align: center; width: 100%;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--bg-2); color: var(--text-2);
+    transition: all 0.15s;
+}
+.cat-pill-active {
+    background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
+}
+
+/* ── Feature strip ── */
+.feature-strip-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-top: 2px solid var(--accent); border-radius: 10px;
+    padding: 1rem; text-align: center; box-shadow: var(--card-shadow);
+    transition: box-shadow 0.18s, border-color 0.18s;
+}
+.feature-strip-card:hover { box-shadow: var(--card-shadow-hover); border-top-color: var(--accent-hover); }
+.feature-strip-icon { font-size: 1.5rem; margin-bottom: 0.35rem; display: block; }
+.feature-strip-name { font-weight: 700; color: var(--text-1); font-size: 0.85rem; }
+.feature-strip-desc { color: var(--text-3); font-size: 0.72rem; margin-top: 3px; }
+
+/* ── Mode toggle button ── */
+.mode-toggle-btn .stButton > button {
+    background: var(--bg-3) !important;
+    color: var(--text-1) !important;
+    box-shadow: none !important;
+    border: 1px solid var(--border) !important;
+    font-size: 0.8rem !important;
+}
+.mode-toggle-btn .stButton > button:hover {
+    border-color: var(--accent) !important;
+    background: var(--accent-dim) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* ── Plotly chart container ── */
+.js-plotly-plot .plotly { border-radius: 10px !important; }
+
+/* ── Vernacular article search results ── */
+.search-result-card {
+    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.85rem 1.1rem; margin-bottom: 0.45rem;
+    transition: border-color 0.18s, background 0.18s;
+}
+.search-result-card:hover { border-color: var(--border-accent); background: var(--bg-3); }
+.search-result-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+.search-result-title { font-weight: 600; color: var(--text-1); font-size: 0.88rem; line-height: 1.4; }
+.search-result-meta { color: var(--text-3); font-size: 0.72rem; margin-top: 2px; }
+.search-result-summary { color: var(--text-2); font-size: 0.8rem; margin-top: 4px; line-height: 1.5; }
+
+/* ── Highlights (contrarian / predictions) ── */
+.insight-card {
+    border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.9rem;
+}
+.insight-card-warning {
+    background: var(--warning-dim); border: 1px solid rgba(251,191,36,0.2);
+}
+.insight-card-accent {
+    background: var(--accent-dim); border: 1px solid var(--border-accent);
+}
+.insight-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.4rem; display: block; }
+.insight-label-warning { color: var(--warning); }
+.insight-label-accent { color: var(--accent); }
+.insight-text { color: var(--text-1); font-size: 0.88rem; line-height: 1.7; }
+"""
+
+st.markdown(
+    f"<style>:root{{{DARK_VARS if IS_DARK else LIGHT_VARS}}}{COMMON_CSS}</style>",
+    unsafe_allow_html=True,
+)
+
+# ── Helper Functions ───────────────────────────────────────────────────────────
 
 def api_post(endpoint: str, payload: dict):
     try:
@@ -249,7 +568,6 @@ def render_tags(tags: list) -> str:
     return "".join(f'<span class="tag">{t}</span>' for t in tags[:4])
 
 
-# ── Client-side category detection (no LLM) ───────────────────────────────────
 _CAT_KEYWORDS = {
     "Markets":  ["sensex", "nifty", "stock", "bse", "nse", "equity", "ipo", "sebi", "share"],
     "Startup":  ["startup", "funding", "series", "unicorn", "venture", "founder", "seed"],
@@ -268,95 +586,95 @@ def _detect_category_client(title: str, summary: str) -> str:
     return "General"
 
 
-# ── Session State Init ─────────────────────────────────────────────────────────
-defaults = {
-    "my_et_page": "onboarding",
-    "user_id": str(uuid.uuid4()),
-    "profile": {},
-    "persona": None,
-    "briefing": None,
-    "deep_dive_article": None,
-    "vern_article_text": "",
-    "vern_article_title": "",
-    "vern_search_results": [],
-    "home_articles": None,
-    "home_category_filter": "All",
-    "prefill_story_arc": "",
-}
-for k, v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
-
-
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
-    <div style="padding: 1.25rem 0 1rem; text-align:center; border-bottom: 1px solid #1a1a1a; margin-bottom: 1rem;">
-        <div style="font-family:'Playfair Display',serif; font-size:2rem; font-weight:800; color:#FFFFFF; letter-spacing:-0.02em; line-height:1;">
-            <span style="color:#B22222;">ET_Intelligence</span>
+    st.markdown(
+        f"""
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-name">ET_<span>Intelligence</span></div>
+            <div class="sidebar-badge">Hackathon · Round 2</div>
         </div>
-        <div style="margin-top:6px;">
-            <span style="background:rgba(139,0,0,0.2); border:1px solid rgba(178,34,34,0.4); color:#B22222; font-size:0.65rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; padding:2px 10px; border-radius:999px;">ET Hackathon · Round 2</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
     page = st.radio(
-        "Navigate",
+        "Navigation",
         ["🏠 Home", "📰 My ET — Newsroom", "📖 Story Arc Tracker", "📄 News Summarizer", "🌐 Vernacular Engine"],
         label_visibility="collapsed",
     )
 
-    st.markdown("---")
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # ── Dark / Light Toggle ──────────────────────────────────────────────────
+    toggle_label = "☀️  Light Mode" if IS_DARK else "🌙  Dark Mode"
+    st.markdown('<div class="mode-toggle-btn">', unsafe_allow_html=True)
+    if st.button(toggle_label, use_container_width=True):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+    st.markdown(f'<hr style="border-color:var(--border); margin:0.6rem 0;">', unsafe_allow_html=True)
+
     with st.expander("⚙️ Setup & Requirements", expanded=False):
-        st.markdown("""
-        <div style="font-size:0.8rem; line-height:2; color:#888;">
-            <div><span style="color:#4ade80;">✓</span> <span style="color:#aaa;"> Ollama running locally</span></div>
-            <div><span style="color:#4ade80;">✓</span> <code style="color:#B22222; background:rgba(139,0,0,0.15); padding:1px 6px; border-radius:4px; font-size:0.78rem;">llama3.1:8b</code> <span style="color:#aaa;"> pulled</span></div>
-            <div style="margin-bottom:0.75rem;"><span style="color:#4ade80;">✓</span> <span style="color:#aaa;"> Backend on port 8000</span></div>
-            <div style="border-top:1px solid #1e1e1e; padding-top:0.75rem; color:#555; font-size:0.75rem;">
-                <div style="margin-bottom:4px;">Start Ollama:</div>
-                <code style="color:#B22222; background:rgba(139,0,0,0.12); padding:3px 8px; border-radius:4px; font-size:0.72rem; display:block; margin-bottom:8px;">ollama run llama3.1:8b</code>
-                <div style="margin-bottom:4px;">Start backend:</div>
-                <code style="color:#B22222; background:rgba(139,0,0,0.12); padding:3px 8px; border-radius:4px; font-size:0.72rem; display:block;">uvicorn app.main:app --reload</code>
+        st.markdown(
+            """
+            <div style="font-size:0.78rem; line-height:1.9; color:var(--text-2);">
+                <div><span style="color:var(--positive);">✓</span> Ollama running locally</div>
+                <div><span style="color:var(--positive);">✓</span> <code>llama3.1:8b</code> pulled</div>
+                <div style="margin-bottom:0.7rem;"><span style="color:var(--positive);">✓</span> Backend on port 8000</div>
+                <div style="border-top:1px solid var(--border); padding-top:0.6rem; color:var(--text-3); font-size:0.72rem;">
+                    <div style="margin-bottom:3px;">Start Ollama:</div>
+                    <code style="color:var(--accent); font-size:0.7rem; display:block; margin-bottom:6px; font-family:'DM Mono',monospace;">ollama run llama3.1:8b</code>
+                    <div style="margin-bottom:3px;">Start backend:</div>
+                    <code style="color:var(--accent); font-size:0.7rem; display:block; font-family:'DM Mono',monospace;">uvicorn app.main:app --reload</code>
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# HOME PAGE — Live ET General News Feed
+# 🏠  HOME PAGE — Live ET General News Feed
 # ═══════════════════════════════════════════════════════════════════════════════
 if page == "🏠 Home":
 
-    st.markdown("""
-    <div class="et-header">
-        <div class="et-logo"><span>ET_Intelligence</span></div>
-        <div class="et-tagline">Live Economic Times · General News Feed</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="et-header">
+            <div class="et-logo"><span>ET_Intelligence</span></div>
+            <div class="et-tagline">Live Economic Times · General News Feed</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     col_title, col_refresh = st.columns([7, 1])
     with col_title:
-        st.markdown("""
-        <div style="margin-bottom: 0.25rem;">
-            <span style="font-family:'Playfair Display',serif; font-size:1.8rem; font-weight:800; color:#fff;">
-                Today's Business News
-            </span>
-        </div>
-        <div style="color:#555; font-size:0.82rem;">
-            Live from Economic Times RSS feeds · Markets · Tech · Startups · Economy · Policy
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="margin-bottom:0.2rem;">
+                <span style="font-family:'Playfair Display',serif; font-size:1.7rem; font-weight:800; color:var(--text-1);">
+                    Today's Business News
+                </span>
+            </div>
+            <div style="color:var(--text-3); font-size:0.8rem;">
+                Live from Economic Times RSS · Markets · Tech · Startups · Economy · Policy
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     with col_refresh:
-        st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         if st.button("↻ Refresh", use_container_width=True):
             st.session_state["home_articles"] = None
             st.rerun()
 
     st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
 
-    # Fetch articles (cached per session, cleared on Refresh)
+    # Fetch articles (cached per session)
     if st.session_state["home_articles"] is None:
         with st.spinner("📡 Fetching live ET articles…"):
             data, err = api_get("/articles/feed", {"max_per_feed": 15})
@@ -365,9 +683,7 @@ if page == "🏠 Home":
             st.stop()
         articles_raw = data.get("articles", [])
         for art in articles_raw:
-            art["_category"] = _detect_category_client(
-                art.get("title", ""), art.get("summary", "")
-            )
+            art["_category"] = _detect_category_client(art.get("title", ""), art.get("summary", ""))
         st.session_state["home_articles"] = articles_raw
 
     articles_raw = st.session_state["home_articles"]
@@ -387,32 +703,23 @@ if page == "🏠 Home":
     all_cats = ["All"] + categories_found
     st.markdown('<div class="section-label">🗂️ Filter by Category</div>', unsafe_allow_html=True)
     cat_cols = st.columns(len(all_cats))
+    active_cat = st.session_state["home_category_filter"]
     for i, cat in enumerate(all_cats):
         with cat_cols[i]:
-            is_active = st.session_state["home_category_filter"] == cat
-            style = ("background:rgba(139,0,0,0.35); border:1px solid #B22222; color:#fff;"
-                     if is_active else
-                     "background:#1a1a1a; border:1px solid #2a2a2a; color:#666;")
-            st.markdown(
-                f'<div style="{style} text-align:center; padding:5px 0; border-radius:8px; '
-                f'font-size:0.75rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;">'
-                f'{cat}</div>',
-                unsafe_allow_html=True,
-            )
+            is_active = active_cat == cat
+            pill_cls = "cat-pill cat-pill-active" if is_active else "cat-pill"
+            st.markdown(f'<div class="{pill_cls}">{cat}</div>', unsafe_allow_html=True)
             if st.button(cat, key=f"cat_{cat}", use_container_width=True):
                 st.session_state["home_category_filter"] = cat
                 st.rerun()
 
     st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
 
-    # Apply filter
-    active_cat = st.session_state["home_category_filter"]
     filtered = articles_raw if active_cat == "All" else [a for a in articles_raw if a.get("_category") == active_cat]
-
     st.markdown(
-        f'<div style="color:#444; font-size:0.78rem; margin-bottom:1rem;">'
-        f'Showing <b style="color:#B22222">{len(filtered)}</b> articles'
-        f'{" in " + active_cat if active_cat != "All" else ""}'
+        f'<div style="color:var(--text-3); font-size:0.76rem; margin-bottom:0.9rem;">'
+        f'Showing <b style="color:var(--accent);">{len(filtered)}</b> articles'
+        f'{" · " + active_cat if active_cat != "All" else ""}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -422,35 +729,34 @@ if page == "🏠 Home":
     else:
         col_a, col_b = st.columns(2)
         for idx, art in enumerate(filtered):
-            title   = art.get("title", "Untitled")
-            summary = art.get("summary", "")
-            source  = art.get("source", "ET")
-            pub     = art.get("published", "")[:16]
-            link    = art.get("link", "")
-            cat     = art.get("_category", "General")
-
-            # Strip any HTML tags that sneak in from RSS
+            title        = art.get("title", "Untitled")
+            summary      = art.get("summary", "")
+            source       = art.get("source", "ET")
+            pub          = art.get("published", "")[:16]
+            link         = art.get("link", "")
+            cat          = art.get("_category", "General")
             summary_clean = _re.sub(r"<[^>]+>", "", summary)[:200]
-
-            card_html = f"""
-            <div class="home-news-card">
-                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.2rem;">
-                    <span class="home-cat-pill">{cat}</span>
-                    <span class="home-news-time">{source} · {pub}</span>
-                </div>
-                <div class="home-news-title">{title}</div>
-                <div class="home-news-summary">{summary_clean}{"…" if len(summary_clean) >= 200 else ""}</div>
-            </div>
-            """
 
             target_col = col_a if idx % 2 == 0 else col_b
             with target_col:
-                st.markdown(card_html, unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div class="home-news-card">
+                        <div style="display:flex; align-items:center; gap:0.45rem; margin-bottom:0.15rem;">
+                            <span class="home-cat-pill">{cat}</span>
+                            <span class="home-news-time">{source} · {pub}</span>
+                        </div>
+                        <div class="home-news-title">{title}</div>
+                        <div class="home-news-summary">{summary_clean}{"…" if len(summary_clean) >= 200 else ""}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 btn_c1, btn_c2 = st.columns(2)
                 with btn_c1:
                     if link:
                         st.markdown(
-                            f'<a href="{link}" target="_blank" style="color:#B22222; font-size:0.78rem; text-decoration:none; font-weight:600;">Read on ET →</a>',
+                            f'<a href="{link}" target="_blank" style="color:var(--accent); font-size:0.76rem; text-decoration:none; font-weight:600;">Read on ET →</a>',
                             unsafe_allow_html=True,
                         )
                 with btn_c2:
@@ -458,52 +764,62 @@ if page == "🏠 Home":
                         topic_words = title.split()[:4]
                         st.session_state["prefill_story_arc"] = " ".join(topic_words)
                         st.rerun()
-                st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:0.2rem'></div>", unsafe_allow_html=True)
 
     # Feature strip
-    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:1.25rem'></div>", unsafe_allow_html=True)
     st.markdown('<div class="section-label">⚡ AI Features — Use the sidebar to explore</div>', unsafe_allow_html=True)
     f1, f2, f3, f4 = st.columns(4)
-    for col, icon, name, desc in zip(
-        [f1, f2, f3, f4],
-        ["📰", "🗺️", "📄", "🌐"],
-        ["My ET", "Story Arc", "Summarizer", "Vernacular"],
-        ["Persona-aware AI feed", "Topic visual narratives", "Article digest", "Hindi/Tamil/Telugu/Bengali"],
-    ):
+    features = [
+        ("📰", "My ET", "Persona-aware AI feed"),
+        ("🗺️", "Story Arc", "Topic visual narratives"),
+        ("📄", "Summarizer", "Article digest in seconds"),
+        ("🌐", "Vernacular", "Hindi · Tamil · Telugu · Bengali"),
+    ]
+    for col, (icon, name, desc) in zip([f1, f2, f3, f4], features):
         with col:
-            st.markdown(f"""
-            <div style="background:#111; border:1px solid #1e1e1e; border-top:2px solid #8B0000;
-                        border-radius:10px; padding:1rem; text-align:center;">
-                <div style="font-size:1.6rem; margin-bottom:0.35rem;">{icon}</div>
-                <div style="font-weight:700; color:#e8e0d5; font-size:0.88rem;">{name}</div>
-                <div style="color:#444; font-size:0.75rem; margin-top:3px;">{desc}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="feature-strip-card">
+                    <span class="feature-strip-icon">{icon}</span>
+                    <div class="feature-strip-name">{name}</div>
+                    <div class="feature-strip-desc">{desc}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MY ET — PERSONALIZED NEWSROOM
+# 📰  MY ET — PERSONALIZED NEWSROOM
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "📰 My ET — Newsroom":
 
-    st.markdown("""
-    <div class="et-header">
-        <div class="et-logo">My<span>ET</span></div>
-        <div class="et-tagline">Your Personalized Newsroom · AI-Powered</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="et-header">
+            <div class="et-logo">My<span>ET</span></div>
+            <div class="et-tagline">Your Personalized Newsroom · AI-Powered</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if st.session_state.my_et_page == "onboarding":
 
-        st.markdown('<div style="max-width:640px; margin:0 auto; padding:2rem 0;">', unsafe_allow_html=True)
-        st.markdown("""
-        <div style="font-family:'Playfair Display',serif; font-size:2.2rem; font-weight:700; color:#FFFFFF; line-height:1.2; margin-bottom:0.5rem;">
-            Who are you reading<br>the news as?
-        </div>
-        <div style="color:#888; font-size:0.95rem; margin-bottom:2rem;">
-            Tell us your role. We'll make ET make sense for <em>your</em> world.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="max-width:660px; margin:0 auto; padding:1.5rem 0 1rem;">
+                <div style="font-family:'Playfair Display',serif; font-size:2rem; font-weight:800; color:var(--text-1); line-height:1.2; margin-bottom:0.4rem;">
+                    Who are you reading<br>the news as?
+                </div>
+                <div style="color:var(--text-2); font-size:0.92rem; margin-bottom:1.75rem; line-height:1.5;">
+                    Tell us your role. We'll shape every headline for <em>your</em> world.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         PERSONAS = {
             "investor":  {"icon": "📈", "name": "Investor",  "desc": "Track markets, MFs, stocks & portfolio impact"},
@@ -517,29 +833,38 @@ elif page == "📰 My ET — Newsroom":
             with cols[i]:
                 selected = st.session_state.persona == key
                 card_cls = "persona-card selected" if selected else "persona-card"
-                st.markdown(f"""
-                <div class="{card_cls}">
-                    <div class="persona-icon">{meta['icon']}</div>
-                    <div class="persona-name">{meta['name']}</div>
-                    <div class="persona-desc">{meta['desc']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div class="{card_cls}">
+                        <span class="persona-icon">{meta['icon']}</span>
+                        <div class="persona-name">{meta['name']}</div>
+                        <div class="persona-desc">{meta['desc']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 if st.button(f"Select {meta['name']}", key=f"persona_{key}", use_container_width=True):
                     st.session_state.persona = key
                     st.rerun()
 
         if st.session_state.persona:
             p = st.session_state.persona
-            st.markdown("---")
-            st.markdown(f"### Tell us more about you as a **{PERSONAS[p]['name']}**")
+            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-family:\'Playfair Display\',serif; font-size:1.2rem; font-weight:700; color:var(--text-1); margin-bottom:1rem;">'
+                f'Tell us more — as a <span style="color:var(--accent);">{PERSONAS[p]["name"]}</span></div>',
+                unsafe_allow_html=True,
+            )
 
             profile_data = {"persona_type": p, "user_id": st.session_state.user_id, "name": ""}
 
             if p == "investor":
                 name = st.text_input("Your name (optional)", placeholder="e.g. Ravi")
-                sectors = st.multiselect("Sectors you invest in",
+                sectors = st.multiselect(
+                    "Sectors you invest in",
                     ["Banking", "IT", "Pharma", "Auto", "FMCG", "Real Estate", "Energy", "Metals", "Telecom"],
-                    default=["Banking", "IT"])
+                    default=["Banking", "IT"],
+                )
                 stocks = st.text_input("Stocks / MFs you track (comma separated)", placeholder="HDFC Bank, Nifty 50, Axis Bluechip Fund")
                 col1, col2 = st.columns(2)
                 with col1: style = st.selectbox("Investment style", ["long-term", "short-term", "swing-trader", "SIP"])
@@ -587,9 +912,11 @@ elif page == "📰 My ET — Newsroom":
                 industry = st.text_input("Your industry", placeholder="e.g. FMCG, Manufacturing, Banking")
                 function = st.selectbox("Your function", ["CEO/MD", "CFO", "CTO", "COO", "Strategy", "Operations", "Marketing", "HR"])
                 size = st.selectbox("Company size", ["startup", "mid-size", "large", "enterprise"])
-                focus = st.multiselect("Strategic priorities",
+                focus = st.multiselect(
+                    "Strategic priorities",
                     ["Expansion", "Cost optimisation", "Digital transformation", "Talent", "M&A", "Exports"],
-                    default=["Expansion"])
+                    default=["Expansion"],
+                )
                 profile_data.update({
                     "name": name,
                     "interests": [industry.lower(), function.lower(), "policy", "corporate", "strategy"],
@@ -599,7 +926,7 @@ elif page == "📰 My ET — Newsroom":
                     },
                 })
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
             if st.button("🚀  Build My Newsroom", use_container_width=True):
                 with st.spinner("Setting up your personalized newsroom…"):
                     data, err = api_post("/my-et/profile/extended", profile_data)
@@ -609,8 +936,6 @@ elif page == "📰 My ET — Newsroom":
                         st.session_state.profile = profile_data
                         st.session_state.my_et_page = "feed"
                         st.rerun()
-
-        st.markdown('</div>', unsafe_allow_html=True)
 
     elif st.session_state.my_et_page == "feed":
 
@@ -625,17 +950,23 @@ elif page == "📰 My ET — Newsroom":
             "executive": {"icon": "🏢", "name": "Executive"},
         }
 
+        # Header row
         col_greeting, col_refresh, col_switch = st.columns([5, 1, 1])
         with col_greeting:
             name = profile.get("name", "").strip()
             greeting = f"Good morning, {name}! 👋" if name else "Good morning! 👋"
             meta = PERSONA_META.get(persona, {})
-            st.markdown(f"""
-            <div>
-                <div style="font-family:'Playfair Display',serif; font-size:1.6rem; font-weight:700; color:#fff; margin-bottom:0.2rem;">{greeting}</div>
-                <div style="color:#666; font-size:0.85rem;">{meta.get('icon','')} Your <b style="color:#B22222">{meta.get('name','')} Newsroom</b> · Live from Economic Times</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div>
+                    <div style="font-family:'Playfair Display',serif; font-size:1.55rem; font-weight:800; color:var(--text-1); margin-bottom:0.2rem;">{greeting}</div>
+                    <div style="color:var(--text-2); font-size:0.83rem;">
+                        {meta.get('icon','')} <b style="color:var(--accent);">{meta.get('name','')} Newsroom</b> · Live from Economic Times
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         with col_refresh:
             if st.button("↻ Refresh", use_container_width=True):
                 st.session_state.briefing = None
@@ -647,7 +978,8 @@ elif page == "📰 My ET — Newsroom":
                 st.session_state.persona = None
                 st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        # Persona switcher
+        st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
         st.markdown('<div class="section-label">⚡ Switch Persona — Watch the same news transform</div>', unsafe_allow_html=True)
         switch_cols = st.columns(4)
         for i, (key, meta) in enumerate(PERSONA_META.items()):
@@ -655,7 +987,10 @@ elif page == "📰 My ET — Newsroom":
                 is_active = persona == key
                 label = f"{meta['icon']} {meta['name']}"
                 if is_active:
-                    st.markdown(f'<div style="text-align:center; padding:0.5rem; background:rgba(139,0,0,0.3); border:1px solid #B22222; border-radius:8px; color:#fff; font-weight:600; font-size:0.85rem;">{label} ✓</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="text-align:center; padding:0.45rem; background:var(--accent-dim); border:1px solid var(--accent); border-radius:8px; color:var(--accent); font-weight:700; font-size:0.82rem;">{label} ✓</div>',
+                        unsafe_allow_html=True,
+                    )
                 else:
                     if st.button(label, key=f"switch_{key}", use_container_width=True):
                         st.session_state.persona = key
@@ -665,10 +1000,11 @@ elif page == "📰 My ET — Newsroom":
                         st.session_state.profile = new_profile
                         st.rerun()
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<div style='height:0.9rem'></div>", unsafe_allow_html=True)
 
+        # Fetch briefing
         if st.session_state.briefing is None:
-            with st.spinner("⚡ Fetching live ET news & generating your AI insights…"):
+            with st.spinner("⚡ Fetching live ET news & generating AI insights…"):
                 data, err = api_get(f"/my-et/briefing/{user_id}", {"top_n": 5})
                 if err:
                     st.error(err)
@@ -677,21 +1013,18 @@ elif page == "📰 My ET — Newsroom":
 
         briefing = st.session_state.briefing
         articles = briefing.get("articles", [])
+        positive_count = sum(1 for a in articles if a.get("sentiment") == "positive")
 
         m1, m2, m3, m4 = st.columns(4)
         with m1: st.metric("📰 Articles", briefing.get("total_articles", 0))
         with m2: st.metric("⚡ AI Insights", briefing.get("enriched_count", 0))
         with m3: st.metric("🎭 Persona", PERSONA_META.get(persona, {}).get("name", ""))
-        with m4:
-            positive = sum(1 for a in articles if a.get("sentiment") == "positive")
-            st.metric("📊 Positive News", f"{positive}/{len(articles)}")
+        with m4: st.metric("📊 Positive News", f"{positive_count}/{len(articles)}")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown('<div class="section-label">📰 Your Feed</div>', unsafe_allow_html=True)
-
+        # Deep dive panel
         if st.session_state.deep_dive_article:
             art = st.session_state.deep_dive_article
-            with st.expander(f"🔍 Deep Dive: {art['title'][:60]}…", expanded=True):
+            with st.expander(f"🔍 Deep Dive: {art['title'][:55]}…", expanded=True):
                 with st.spinner("Generating contextual analysis…"):
                     dd_data, dd_err = api_post("/my-et/deep-dive", {
                         "user_id": user_id,
@@ -705,25 +1038,35 @@ elif page == "📰 My ET — Newsroom":
                     dd_cols = st.columns(2)
                     for i, section in enumerate(dd_data.get("sections", [])):
                         with dd_cols[i % 2]:
-                            st.markdown(f"""
-                            <div class="deep-dive-section">
-                                <div class="deep-dive-heading">{section.get('heading','')}</div>
-                                <div class="deep-dive-content">{section.get('content','')}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            st.markdown(
+                                f"""
+                                <div class="deep-dive-section">
+                                    <div class="deep-dive-heading">{section.get('heading','')}</div>
+                                    <div class="deep-dive-content">{section.get('content','')}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
                     if dd_data.get("bottom_line"):
-                        st.markdown(f"""
-                        <div class="bottom-line">
-                            <div class="bottom-line-label">⚡ Bottom Line for You</div>
-                            <div class="bottom-line-text">{dd_data['bottom_line']}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(
+                            f"""
+                            <div class="bottom-line">
+                                <span class="bottom-line-label">⚡ Bottom Line for You</span>
+                                <div class="bottom-line-text">{dd_data['bottom_line']}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                     if art.get("link"):
-                        st.markdown(f'<br><a href="{art["link"]}" target="_blank" style="color:#B22222; font-size:0.85rem;">Read full article on ET →</a>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div style="margin-top:0.75rem;"><a href="{art["link"]}" target="_blank" style="color:var(--accent); font-size:0.84rem; font-weight:600; text-decoration:none;">Read full article on ET →</a></div>',
+                            unsafe_allow_html=True,
+                        )
                 if st.button("✕ Close Deep Dive"):
                     st.session_state.deep_dive_article = None
                     st.rerun()
-            st.markdown("<br>", unsafe_allow_html=True)
+
+        st.markdown('<div class="section-label">📰 Your Feed</div>', unsafe_allow_html=True)
 
         for i, art in enumerate(articles):
             title     = art.get("title", "Untitled")
@@ -736,24 +1079,33 @@ elif page == "📰 My ET — Newsroom":
             tags      = art.get("tags", [])
             link      = art.get("link", "")
 
-            st.markdown(f"""
-            <div class="news-card">
-                <div class="news-meta">
-                    <span class="news-source">{source}</span>
-                    <span class="news-time">{pub}</span>
-                    {sentiment_dot(sentiment)}
-                    <span style="font-size:0.72rem; color:#555;">{sentiment.capitalize()}</span>
-                </div>
-                <div class="news-title">{title}</div>
-                <div class="news-summary">{summary}…</div>
-                {render_tags(tags)}
-                {"" if not snippet else f'''
-<div class="ai-snippet">
-                    <div class="ai-snippet-label">⚡ What this means for you</div>
+            snippet_html = (
+                f"""
+                <div class="ai-snippet">
+                    <span class="ai-snippet-label">⚡ What this means for you</span>
                     <div class="ai-snippet-text">{snippet.replace("<", "&lt;").replace(">", "&gt;")}</div>
-                </div>'''}
-            </div>
-            """, unsafe_allow_html=True)
+                </div>
+                """
+                if snippet else ""
+            )
+
+            st.markdown(
+                f"""
+                <div class="news-card">
+                    <div class="news-meta">
+                        <span class="news-source">{source}</span>
+                        <span class="news-time">{pub}</span>
+                        {sentiment_dot(sentiment)}
+                        <span style="font-size:0.68rem; color:var(--text-3);">{sentiment.capitalize()}</span>
+                    </div>
+                    <div class="news-title">{title}</div>
+                    <div class="news-summary">{summary}…</div>
+                    <div>{render_tags(tags)}</div>
+                    {snippet_html}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
             btn_col1, btn_col2, btn_col3 = st.columns([2, 2, 6])
             with btn_col1:
@@ -776,31 +1128,39 @@ elif page == "📰 My ET — Newsroom":
                             st.rerun()
                 else:
                     if link:
-                        st.markdown(f'<a href="{link}" target="_blank" style="color:#B22222; font-size:0.8rem; text-decoration:none;">Read on ET →</a>', unsafe_allow_html=True)
+                        st.markdown(
+                            f'<a href="{link}" target="_blank" style="color:var(--accent); font-size:0.78rem; text-decoration:none; font-weight:600;">Read on ET →</a>',
+                            unsafe_allow_html=True,
+                        )
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STORY ARC TRACKER
+# 📖  STORY ARC TRACKER
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "📖 Story Arc Tracker":
 
-    st.markdown("""
-    <div class="et-header">
-        <div class="et-logo">Story <span>Arc</span></div>
-        <div class="et-tagline">Visual Business Narratives · AI-Powered</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="et-header">
+            <div class="et-logo">Story <span>Arc</span></div>
+            <div class="et-tagline">Visual Business Narratives · AI-Powered</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("""
-    <div class="hero-banner">
-        <p class="hero-title">🗺️ Story Arc Tracker</p>
-        <p class="hero-sub">Enter any business topic. AI builds a complete visual narrative from live ET articles.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="hero-banner">
+            <div class="hero-title">🗺️ Story Arc Tracker</div>
+            <div class="hero-sub">Enter any business topic. AI builds a complete visual narrative from live ET articles.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # Consume pre-fill from Home quick-launch
     prefill = st.session_state.get("prefill_story_arc", "")
     if prefill:
         st.session_state["prefill_story_arc"] = ""
@@ -808,29 +1168,31 @@ elif page == "📖 Story Arc Tracker":
     col_inp, col_btn = st.columns([4, 1])
     with col_inp:
         topic = st.text_input(
-            "Business topic", value=prefill,
+            "Topic", value=prefill,
             placeholder="e.g. Adani Group, Jio IPO, RBI rate cut, Zomato…",
             label_visibility="collapsed",
         )
     with col_btn:
         generate = st.button("⚡ Generate Arc", use_container_width=True)
 
-    st.markdown("""
-    <div style="color:#555; font-size:0.8rem; margin-top:-0.5rem; margin-bottom:1rem;">
-        Try: &nbsp;
-        <span style="color:#B22222;">Adani Group</span> &nbsp;·&nbsp;
-        <span style="color:#B22222;">Reliance Jio IPO</span> &nbsp;·&nbsp;
-        <span style="color:#B22222;">RBI rate cut</span> &nbsp;·&nbsp;
-        <span style="color:#B22222;">Startups funding winter</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="color:var(--text-3); font-size:0.78rem; margin-top:-0.4rem; margin-bottom:1.1rem;">
+            Try: &nbsp;
+            <span style="color:var(--accent); font-weight:600;">Adani Group</span> &nbsp;·&nbsp;
+            <span style="color:var(--accent); font-weight:600;">Reliance Jio IPO</span> &nbsp;·&nbsp;
+            <span style="color:var(--accent); font-weight:600;">RBI rate cut</span> &nbsp;·&nbsp;
+            <span style="color:var(--accent); font-weight:600;">Startups funding winter</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # Auto-fire if prefill came from Home
     if prefill and topic:
         generate = True
 
     if generate and topic.strip():
-        with st.spinner(f"🔍 Analysing topic across ET articles…"):
+        with st.spinner(f"🔍 Analysing '{topic}' across ET articles…"):
             data, err = api_post("/story-arc", {"topic": topic})
 
         if err:
@@ -839,129 +1201,164 @@ elif page == "📖 Story Arc Tracker":
             m1, m2, m3, m4 = st.columns(4)
             with m1: st.metric("📰 Articles Analysed", data.get("article_count", 0))
             with m2: st.metric("📡 Data Source", data.get("data_source_badge", ""))
-            with m3:
-                last_up = data.get("last_updated", "")
-                st.metric("🕒 Last Updated", last_up[:16] if last_up else "Just now")
-            with m4: st.metric("📊 Sentiment Trend", data.get("sentiment_trend", "mixed").capitalize())
+            last_up = data.get("last_updated", "")
+            with m3: st.metric("🕒 Last Updated", last_up[:16] if last_up else "Just now")
+            with m4: st.metric("📊 Sentiment", data.get("sentiment_trend", "mixed").capitalize())
 
+            # Sentiment chart
             sentiment_data = data.get("sentiment_data", [])
             if sentiment_data:
-                st.markdown('<div class="section-heading">📊 Sentiment Over Articles</div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-heading">📊 Article Sentiment</div>', unsafe_allow_html=True)
                 df = pd.DataFrame(sentiment_data)
-                df["color"] = df["score"].apply(lambda s: "#4ade80" if s >= 0.05 else ("#f87171" if s <= -0.05 else "#888"))
+                pos_col = "#4ade80"
+                neg_col = "#f87171"
+                neu_col = "#6b6360"
+                df["color"] = df["score"].apply(lambda s: pos_col if s >= 0.05 else (neg_col if s <= -0.05 else neu_col))
                 fig = go.Figure()
                 fig.add_trace(go.Bar(
-                    x=list(range(len(df))), y=df["score"], marker_color=df["color"],
+                    x=list(range(len(df))), y=df["score"],
+                    marker_color=df["color"], marker_line_width=0,
                     hovertemplate="<b>%{customdata}</b><br>Score: %{y:.3f}<extra></extra>",
                     customdata=df["title"],
                 ))
-                fig.add_hline(y=0, line_color="rgba(255,255,255,0.15)", line_dash="dash")
-                fig.add_hrect(y0=0.05, y1=1, fillcolor="rgba(74,222,128,0.05)", line_width=0)
-                fig.add_hrect(y0=-1, y1=-0.05, fillcolor="rgba(248,113,113,0.05)", line_width=0)
+                fig.add_hline(y=0, line_color="rgba(255,255,255,0.1)" if IS_DARK else "rgba(0,0,0,0.1)", line_dash="dash")
+                fig.add_hrect(y0=0.05, y1=1, fillcolor="rgba(74,222,128,0.04)", line_width=0)
+                fig.add_hrect(y0=-1, y1=-0.05, fillcolor="rgba(248,113,113,0.04)", line_width=0)
+                bg = "rgba(0,0,0,0)"
+                grid = "rgba(255,255,255,0.05)" if IS_DARK else "rgba(0,0,0,0.05)"
+                tick_color = "#4a4a4a" if IS_DARK else "#aaa6a2"
                 fig.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    xaxis=dict(showticklabels=False, gridcolor="rgba(255,255,255,0.04)"),
-                    yaxis=dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(color="#666"), range=[-1, 1]),
-                    margin=dict(l=0, r=0, t=10, b=10), height=220,
+                    paper_bgcolor=bg, plot_bgcolor=bg,
+                    xaxis=dict(showticklabels=False, gridcolor=grid, zeroline=False),
+                    yaxis=dict(gridcolor=grid, tickfont=dict(color=tick_color, size=11), range=[-1, 1], zeroline=False),
+                    margin=dict(l=0, r=0, t=8, b=8), height=210,
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
             col_l, col_r = st.columns([3, 2])
+
             with col_l:
+                # Timeline
                 timeline = data.get("timeline", [])
                 if timeline:
                     st.markdown('<div class="section-heading">📅 Event Timeline</div>', unsafe_allow_html=True)
                     for ev in timeline:
                         sig = ev.get("significance", "medium").lower()
-                        st.markdown(f"""
-                        <div class="timeline-item">
-                            <div class="timeline-dot timeline-dot-{sig}"></div>
-                            <div>
-                                <div style="color:#555; font-size:0.75rem;">{ev.get('date','')}</div>
-                                <div style="color:#e8e0d5; font-size:0.88rem; margin-top:2px;">{ev.get('event','')}</div>
+                        st.markdown(
+                            f"""
+                            <div class="timeline-item">
+                                <div class="timeline-dot timeline-dot-{sig}"></div>
+                                <div>
+                                    <div style="color:var(--text-3); font-size:0.72rem; font-weight:600; font-family:'DM Mono',monospace;">{ev.get('date','')}</div>
+                                    <div style="color:var(--text-1); font-size:0.86rem; margin-top:3px; line-height:1.5;">{ev.get('event','')}</div>
+                                </div>
                             </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
+                # Sentiment summary
                 sum_text = data.get("sentiment_summary", "")
                 if sum_text:
                     st.markdown('<div class="section-heading">💬 Sentiment Analysis</div>', unsafe_allow_html=True)
-                    st.markdown(f"""
-                    <div class="glass-card">
-                        <div style="margin-bottom:0.5rem;">{trend_badge(data.get("sentiment_trend","mixed"))}</div>
-                        <div style="color:#ccc; font-size:0.9rem; line-height:1.6;">{sum_text}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <div class="glass-card">
+                            <div style="margin-bottom:0.5rem;">{trend_badge(data.get("sentiment_trend","mixed"))}</div>
+                            <div style="color:var(--text-2); font-size:0.88rem; line-height:1.7;">{sum_text}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
             with col_r:
+                # Key players
                 players = data.get("key_players", [])
                 if players:
                     st.markdown('<div class="section-heading">👥 Key Players</div>', unsafe_allow_html=True)
                     for p in players[:6]:
                         stance = p.get("stance", "neutral").lower()
-                        st.markdown(f"""
-                        <div class="player-card">
-                            <div class="player-name">{p.get('name','')}</div>
-                            <div class="player-role">{p.get('role','')}</div>
-                            <div style="margin-top:6px;">{sentiment_badge(0.1 if stance=='positive' else (-0.1 if stance=='negative' else 0))}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        score = 0.1 if stance == "positive" else (-0.1 if stance == "negative" else 0)
+                        st.markdown(
+                            f"""
+                            <div class="player-card">
+                                <div class="player-name">{p.get('name','')}</div>
+                                <div class="player-role">{p.get('role','')}</div>
+                                <div style="margin-top:6px;">{sentiment_badge(score)}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
+            # Contrarian view
             contrarian = data.get("contrarian_view", "")
             if contrarian:
                 st.markdown('<div class="section-heading">🔄 Contrarian View</div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="glass-card" style="border-color:rgba(251,191,36,0.25);">
-                    <div style="color:#fbbf24; font-size:0.85rem; font-weight:600; margin-bottom:0.5rem;">⚠️ Alternative Perspective</div>
-                    <div style="color:#ccc; font-size:0.9rem; line-height:1.7;">{contrarian}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div class="insight-card insight-card-warning">
+                        <span class="insight-label insight-label-warning">⚠️ Alternative Perspective</span>
+                        <div class="insight-text">{contrarian}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
+            # Predictions
             predictions = data.get("predictions", "")
             if predictions:
-                st.markdown('<div class="section-heading">🔮 Predictions & What to Watch</div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="glass-card" style="border-color:rgba(178,34,34,0.3);">
-                    <div style="color:#B22222; font-size:0.85rem; font-weight:600; margin-bottom:0.5rem;">✨ Future Outlook</div>
-                    <div style="color:#ccc; font-size:0.9rem; line-height:1.7;">{predictions}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown('<div class="section-heading">🔮 What to Watch</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div class="insight-card insight-card-accent">
+                        <span class="insight-label insight-label-accent">✨ Future Outlook</span>
+                        <div class="insight-text">{predictions}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     elif generate and not topic.strip():
         st.warning("Please enter a topic to analyse.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# NEWS SUMMARIZER
+# 📄  NEWS SUMMARIZER
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "📄 News Summarizer":
 
-    st.markdown("""
-    <div class="et-header">
-        <div class="et-logo">News <span>Summary</span></div>
-        <div class="et-tagline">AI Article Digest · Instant Insights</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="et-header">
+            <div class="et-logo">News <span>Digest</span></div>
+            <div class="et-tagline">AI Article Summarizer · Instant Insights</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("""
-    <div class="hero-banner">
-        <p class="hero-title">📄 News Summarizer</p>
-        <p class="hero-sub">Paste any article or URL. Get a crisp AI summary with key takeaways.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="hero-banner">
+            <div class="hero-title">📄 News Summarizer</div>
+            <div class="hero-sub">Paste any article or URL. Get a crisp AI digest with key takeaways and contextual impact.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     input_mode = st.radio("Input type", ["📝 Paste Text", "🔗 Article URL"], horizontal=True)
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
 
     article_text = None
     article_url  = None
 
     if input_mode == "📝 Paste Text":
-        article_text = st.text_area("Article text", placeholder="Paste the full article text here…", height=260, label_visibility="collapsed")
+        article_text = st.text_area("Article text", placeholder="Paste the full article text here…", height=240, label_visibility="collapsed")
     else:
-        article_url = st.text_input("Article URL", placeholder="https://economictimes.indiatimes.com/...", label_visibility="collapsed")
+        article_url = st.text_input("Article URL", placeholder="https://economictimes.indiatimes.com/…", label_visibility="collapsed")
 
-    summarize_btn = st.button("📄 Summarize Article", use_container_width=False)
+    summarize_btn = st.button("📄  Summarize Article", use_container_width=False)
 
     if summarize_btn:
         payload = {}
@@ -983,53 +1380,68 @@ elif page == "📄 News Summarizer":
             with m3: st.metric("📏 Article Length", f"{data.get('char_count',0):,} chars")
 
             st.markdown('<div class="section-heading">💡 AI Summary</div>', unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class="glass-card" style="border-color:rgba(178,34,34,0.3);">
-                <div style="color:#e8e0d5; font-size:1rem; line-height:1.8;">{data.get("summary", "Summary not available.")}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="glass-card" style="border-left:4px solid var(--accent);">
+                    <div style="color:var(--text-1); font-size:0.96rem; line-height:1.8;">{data.get("summary", "Summary not available.")}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
             takeaways = data.get("key_takeaways", [])
             if takeaways:
                 st.markdown('<div class="section-heading">🎯 Key Takeaways</div>', unsafe_allow_html=True)
                 st.markdown('<div class="glass-card">', unsafe_allow_html=True)
                 for i, t in enumerate(takeaways, 1):
-                    st.markdown(f"""
-                    <div class="takeaway">
-                        <span class="takeaway-bullet">{i}.</span>
-                        <span class="takeaway-text">{t}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <div class="takeaway">
+                            <span class="takeaway-bullet">{i}.</span>
+                            <span class="takeaway-text">{t}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 st.markdown("</div>", unsafe_allow_html=True)
 
             impact = data.get("contextual_impact", "")
             if impact:
                 st.markdown('<div class="section-heading">🌍 Contextual Impact</div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="glass-card" style="border-color:rgba(178,34,34,0.2);">
-                    <div style="color:#e8e0d5; font-size:0.95rem; line-height:1.7;">{impact}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div class="insight-card insight-card-accent">
+                        <div style="color:var(--text-1); font-size:0.9rem; line-height:1.7;">{impact}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# VERNACULAR ENGINE
+# 🌐  VERNACULAR ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "🌐 Vernacular Engine":
 
-    st.markdown("""
-    <div class="et-header">
-        <div class="et-logo">Vernacular <span>Engine</span></div>
-        <div class="et-tagline">Business News in Your Language</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="et-header">
+            <div class="et-logo">Vernacular <span>Engine</span></div>
+            <div class="et-tagline">Business News in Your Language</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("""
-    <div class="hero-banner">
-        <p class="hero-title">🌐 Vernacular Engine</p>
-        <p class="hero-sub">Search ET articles, enter a URL, or paste text — then translate with local cultural context.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="hero-banner">
+            <div class="hero-title">🌐 Vernacular Engine</div>
+            <div class="hero-sub">Search ET articles, paste a URL, or enter text — then translate with local cultural context and a terminology glossary.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     LANG_OPTIONS = {
         "🇮🇳 Hindi (हिंदी)": "hi",
@@ -1039,7 +1451,7 @@ elif page == "🌐 Vernacular Engine":
     }
 
     input_mode = st.radio(
-        "How to find the article",
+        "Source",
         ["🔍 Search ET Articles", "🔗 Article URL", "📝 Paste Text"],
         horizontal=True, label_visibility="collapsed",
     )
@@ -1065,25 +1477,30 @@ elif page == "🌐 Vernacular Engine":
 
         results = st.session_state.get("vern_search_results", [])
         if results:
-            st.markdown(f'<div style="color:#555; font-size:0.8rem; margin-bottom:0.75rem;">{len(results)} articles found — click → to load one</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="color:var(--text-3); font-size:0.77rem; margin-bottom:0.65rem;">{len(results)} articles found — click → to load one</div>',
+                unsafe_allow_html=True,
+            )
             for art in results:
                 title   = art.get("title", "Untitled")
                 summary = art.get("summary", "")[:160]
                 pub     = art.get("published", "")[:16]
                 link    = art.get("link", "")
                 is_sel  = st.session_state.get("vern_article_title") == title
-                border_col = "rgba(178,34,34,0.6)" if is_sel else "rgba(255,255,255,0.05)"
-                bg_col     = "rgba(139,0,0,0.08)"  if is_sel else "rgba(255,255,255,0.02)"
+                card_cls = "search-result-card selected" if is_sel else "search-result-card"
 
                 col_card, col_pick = st.columns([10, 1])
                 with col_card:
-                    st.markdown(f"""
-                    <div class="glass-card" style="padding:0.85rem 1.1rem; border-color:{border_col}; background:{bg_col}; margin-bottom:0.4rem;">
-                        <div style="font-weight:600; color:#e8e0d5; font-size:0.9rem;">{title}</div>
-                        <div style="color:#555; font-size:0.75rem; margin-top:2px;">{pub}</div>
-                        <div style="color:#666; font-size:0.82rem; margin-top:4px; line-height:1.5;">{summary}…</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <div class="{card_cls}">
+                            <div class="search-result-title">{title}</div>
+                            <div class="search-result-meta">{pub}</div>
+                            <div class="search-result-summary">{summary}…</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 with col_pick:
                     btn_label = "✓" if is_sel else "→"
                     if st.button(btn_label, key=f"pick_{link}", use_container_width=True):
@@ -1099,18 +1516,20 @@ elif page == "🌐 Vernacular Engine":
                         st.rerun()
 
         if st.session_state.get("vern_article_title"):
-            st.markdown(f"""
-            <div class="glass-card" style="border-color:rgba(178,34,34,0.4); margin-top:0.5rem; padding:0.85rem 1.1rem;">
-                <div style="color:#B22222; font-size:0.78rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em;">✅ Selected Article</div>
-                <div style="color:#e8e0d5; font-size:0.9rem; font-weight:500; margin-top:6px;">{st.session_state['vern_article_title']}</div>
-                <div style="color:#555; font-size:0.78rem; margin-top:4px;">{len(st.session_state['vern_article_text']):,} characters loaded</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div class="success-box" style="margin-top:0.5rem;">
+                    <b>✅ Selected:</b> {st.session_state['vern_article_title']}
+                    <span style="float:right; opacity:0.6;">{len(st.session_state['vern_article_text']):,} chars</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     elif input_mode == "🔗 Article URL":
         col_u, col_ub = st.columns([5, 1])
         with col_u:
-            article_url = st.text_input("ET Article URL", placeholder="https://economictimes.indiatimes.com/...", label_visibility="collapsed")
+            article_url = st.text_input("ET Article URL", placeholder="https://economictimes.indiatimes.com/…", label_visibility="collapsed")
         with col_ub:
             fetch_btn = st.button("📥 Fetch", use_container_width=True)
 
@@ -1124,11 +1543,11 @@ elif page == "🌐 Vernacular Engine":
                     if fetched:
                         st.session_state["vern_article_text"] = fetched
                         st.session_state["vern_article_title"] = article_url.strip()
-                        st.success(f"✅ Fetched {fd.get('char_count', len(fetched)):,} characters")
+                        st.markdown(f'<div class="success-box">✅ Fetched {fd.get("char_count", len(fetched)):,} characters</div>', unsafe_allow_html=True)
                     else:
-                        st.error("Could not extract text. Try the Paste Text mode.")
+                        st.markdown('<div class="err-box">Could not extract text. Try the Paste Text mode.</div>', unsafe_allow_html=True)
                 except Exception as e:
-                    st.error(f"Fetch failed: {e}")
+                    st.markdown(f'<div class="err-box">Fetch failed: {e}</div>', unsafe_allow_html=True)
 
         if st.session_state.get("vern_article_text"):
             with st.expander("📄 Preview fetched text", expanded=False):
@@ -1140,7 +1559,8 @@ elif page == "🌐 Vernacular Engine":
             st.session_state["vern_article_text"] = pasted.strip()
             st.session_state["vern_article_title"] = "Pasted text"
 
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:0.85rem'></div>", unsafe_allow_html=True)
+
     col_lang, col_mod, col_tbtn = st.columns([2, 2, 1])
     with col_lang:
         selected_lang_label = st.selectbox("Target language", list(LANG_OPTIONS.keys()))
@@ -1148,9 +1568,12 @@ elif page == "🌐 Vernacular Engine":
     with col_mod:
         selected_model = st.selectbox("Translation Model", ["llama3.1:8b", "aya:8b", "gemma2:9b", "qwen2.5:7b", "mistral:7b"])
     with col_tbtn:
-        st.markdown("<div style='height:1.75rem'></div>", unsafe_allow_html=True)
-        translate_btn = st.button("🌐 Translate", use_container_width=True,
-                                  disabled=not bool(st.session_state.get("vern_article_text")))
+        st.markdown("<div style='height:1.65rem'></div>", unsafe_allow_html=True)
+        translate_btn = st.button(
+            "🌐  Translate",
+            use_container_width=True,
+            disabled=not bool(st.session_state.get("vern_article_text")),
+        )
 
     if translate_btn and st.session_state.get("vern_article_text"):
         lang_display = selected_lang_label.split("(")[0].strip()
@@ -1164,36 +1587,53 @@ elif page == "🌐 Vernacular Engine":
         if err:
             st.markdown(f'<div class="err-box">{err}</div>', unsafe_allow_html=True)
         elif data:
-            st.markdown('<div class="section-heading">📄 Translation</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-heading">📄 Translation Result</div>', unsafe_allow_html=True)
+
             col_orig, col_trans = st.columns(2)
             with col_orig:
-                st.markdown('<div style="color:#555; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">🇬🇧 Original (English)</div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto;">
-                    <div style="color:#ccc; font-size:0.88rem; line-height:1.8;">{data.get('original','')[:1500]}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    '<div style="color:var(--text-3); font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">🇬🇧 Original (English)</div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"""
+                    <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto;">
+                        <div style="color:var(--text-2); font-size:0.86rem; line-height:1.8;">{data.get('original','')[:1500]}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             with col_trans:
-                native    = data.get("target_language_native", "")
-                eng       = data.get("target_language", "")
-                flag      = data.get("flag", "🇮🇳")
+                native     = data.get("target_language_native", "")
+                eng        = data.get("target_language", "")
+                flag       = data.get("flag", "🇮🇳")
                 model_used = data.get("model_used", "")
-                st.markdown(f'<div style="color:#555; font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">{flag} Translated ({eng} · {native}) / <span style="color:#B22222">{model_used}</span></div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto; border-color:rgba(178,34,34,0.3);">
-                    <div style="color:#e8e0d5; font-size:0.95rem; line-height:1.9;">{data.get('improved_translation', data.get('base_translation',''))}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="color:var(--text-3); font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem;">'
+                    f'{flag} {eng} ({native}) &nbsp;·&nbsp; <span style="color:var(--accent);">{model_used}</span></div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"""
+                    <div class="glass-card" style="min-height:130px; max-height:320px; overflow-y:auto; border-left:3px solid var(--accent);">
+                        <div style="color:var(--text-1); font-size:0.95rem; line-height:1.95;">{data.get('improved_translation', data.get('base_translation',''))}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             context_note = data.get("local_context_note", "")
             if context_note:
                 st.markdown('<div class="section-heading">📍 Local Context Note</div>', unsafe_allow_html=True)
-                st.markdown(f"""
-                <div class="glass-card" style="border-color:rgba(251,191,36,0.25);">
-                    <div style="color:#fbbf24; font-size:0.8rem; font-weight:700; margin-bottom:0.5rem;">🗺️ FOR LOCAL READERS</div>
-                    <div style="color:#ccc; font-size:0.9rem; line-height:1.7;">{context_note}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div class="insight-card insight-card-warning">
+                        <span class="insight-label insight-label-warning">🗺️ For Local Readers</span>
+                        <div class="insight-text">{context_note}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             glossary = data.get("terminology_glossary", [])
             if glossary:
@@ -1201,10 +1641,13 @@ elif page == "🌐 Vernacular Engine":
                 cols = st.columns(min(len(glossary), 3))
                 for i, item in enumerate(glossary):
                     with cols[i % 3]:
-                        st.markdown(f"""
-                        <div class="gloss-card">
-                            <div class="gloss-term">{item.get('term','')}</div>
-                            <div class="gloss-trans">{item.get('translation','')}</div>
-                            <div class="gloss-exp">{item.get('explanation','')}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(
+                            f"""
+                            <div class="gloss-card">
+                                <div class="gloss-term">{item.get('term','')}</div>
+                                <div class="gloss-trans">{item.get('translation','')}</div>
+                                <div class="gloss-exp">{item.get('explanation','')}</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
