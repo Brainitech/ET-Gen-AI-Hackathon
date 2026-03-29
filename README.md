@@ -326,5 +326,5 @@ python test_pipeline.py
 
 <!--Upcoming Demo -->
 
-![ Demo](demo.gif)
+![ Demo](./ET_DEMO_Final.gif)
 ▶️ [Watch Demo Video](https://drive.google.com/file/d/1SNUUMFskFPoWsfDVWKeAQFaBv6sMQ8Da/view?usp=sharing)
