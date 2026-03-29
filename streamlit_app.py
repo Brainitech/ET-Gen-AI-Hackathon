@@ -1,5 +1,5 @@
 """
-aether_ai — Unified Streamlit Frontend
+ET_Intelligence — Unified Streamlit Frontend
 ET Hackathon Round 2 | All features in one app
 My ET · Story Arc Tracker · News Summarizer · Vernacular Engine
 """
@@ -12,7 +12,7 @@ import uuid
 
 # ── Page Configuration ─────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="aether_ai — AI-Native Business News",
+    page_title="ET_Intelligence — AI-Native Business News",
     page_icon="📰",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -499,7 +499,7 @@ with st.sidebar:
     st.markdown("""
     <div style="padding: 1.25rem 0 1rem; text-align:center; border-bottom: 1px solid #1a1a1a; margin-bottom: 1rem;">
         <div style="font-family:'Playfair Display',serif; font-size:2rem; font-weight:800; color:#FFFFFF; letter-spacing:-0.02em; line-height:1;">
-            aether<span style="color:#B22222;">_ai</span>
+            <span style="color:#B22222;">ET_Intelligence</span>
         </div>
         <div style="margin-top:6px;">
             <span style="background:rgba(139,0,0,0.2); border:1px solid rgba(178,34,34,0.4); color:#B22222; font-size:0.65rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; padding:2px 10px; border-radius:999px;">ET Hackathon · Round 2</span>
@@ -881,7 +881,7 @@ elif page == "🏠 Home":
 
     st.markdown("""
     <div class="et-header">
-        <div class="et-logo">aether<span>_ai</span></div>
+        <div class="et-logo"><span>ET_Intelligence</span></div>
         <div class="et-tagline">AI-Native Business News · ET Hackathon Round 2</div>
     </div>
     """, unsafe_allow_html=True)

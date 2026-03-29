@@ -1,5 +1,5 @@
 """
-aether_ai — Core Configuration
+ET_Intelligence — Core Configuration
 Auto-detects LLM: Groq (if GROQ_API_KEY is set) else local Ollama
 """
 import os

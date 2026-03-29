@@ -1,5 +1,5 @@
 """
-aether_ai — News Summarizer Service
+ET_Intelligence — News Summarizer Service
 
 Accepts raw text or a URL, returns:
   - abstractive summary (2-3 sentences via LLM)

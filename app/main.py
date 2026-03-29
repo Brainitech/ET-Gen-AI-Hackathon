@@ -1,5 +1,5 @@
 """
-aether_ai — FastAPI Application Root
+ET_Intelligence — FastAPI Application Root
 Three AI-native news features: Story Arc Tracker, News Summarizer, Vernacular Engine
 """
 from fastapi import FastAPI
@@ -10,7 +10,7 @@ from app.api.v1.endpoints import story_arc, summarizer, vernacular, articles
 from app.api.v1.endpoints import my_et_extended
 
 app = FastAPI(
-    title="aether_ai — AI-Native News Engine",
+    title="ET_Intelligence — AI-Native News Engine",
     description=(
         "ET Hackathon Round 2 | "
         "Story Arc Tracker · News Summarizer · Vernacular Business News Engine"
@@ -37,13 +37,13 @@ app.include_router(my_et_extended.router, prefix=PREFIX)
 
 @app.get("/health", tags=["Health"])
 def health():
-    return {"status": "ok", "version": "2.0.0", "project": "aether_ai"}
+    return {"status": "ok", "version": "2.0.0", "project": "ET_Intelligence"}
 
 
 @app.get("/", tags=["Root"])
 def root():
     return {
-        "message": "aether_ai API is running",
+        "message": "ET_Intelligence API is running",
         "docs": "/docs",
         "endpoints": {
             "story_arc": "/api/v1/story-arc",

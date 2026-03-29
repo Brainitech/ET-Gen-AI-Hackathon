@@ -1,5 +1,5 @@
 """
-aether_ai — Story Arc Tracker Service
+ET_Intelligence — Story Arc Tracker Service
 
 Given a topic (e.g. "Adani Group"), fetches related ET articles and produces:
   - timeline of key dated events

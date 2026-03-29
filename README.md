@@ -1,8 +1,8 @@
-# aether_ai — AI-Native Business News Engine
+# — AI-Native Business News Engine
 
 > Built for the Economic Times Gen AI Hackathon · Round 2
 
-aether_ai transforms how business professionals consume news. Instead of a static, one-size-fits-all homepage, it delivers a fundamentally different experience for every reader — one that understands who you are, what you do, and what the news means *for you specifically*.
+_ai transforms how business professionals consume news. Instead of a static, one-size-fits-all homepage, it delivers a fundamentally different experience for every reader — one that understands who you are, what you do, and what the news means \_for you specifically_.
 
 ---
 
@@ -21,9 +21,9 @@ aether_ai transforms how business professionals consume news. Instead of a stati
 
 ## Overview
 
-aether_ai is a full-stack AI news platform built on live Economic Times RSS feeds. It exposes five distinct intelligent features through a FastAPI backend and a unified Streamlit frontend that brings together the personalized newsroom, story intelligence, summarization, and vernacular translation under one surface.
+is a full-stack AI news platform built on live Economic Times RSS feeds. It exposes five distinct intelligent features through a FastAPI backend and a unified Streamlit frontend that brings together the personalized newsroom, story intelligence, summarization, and vernacular translation under one surface.
 
-The core thesis: the same piece of news means entirely different things to a retail investor, a startup founder, a student, and a corporate executive. aether_ai operationalizes that insight at every layer — from article retrieval to AI-generated contextual commentary.
+The core thesis: the same piece of news means entirely different things to a retail investor, a startup founder, a student, and a corporate executive. operationalizes that insight at every layer — from article retrieval to AI-generated contextual commentary.
 
 All features run on a fully local, zero-cost LLM stack via Ollama, with optional Groq cloud acceleration through a single environment variable.
 
@@ -33,7 +33,7 @@ All features run on a fully local, zero-cost LLM stack via Ollama, with optional
 
 ### My ET — The Personalized Newsroom
 
-A persona-driven news feed that goes beyond topic filtering. After a one-time onboarding where the user declares their role and context, every article in their feed is enriched with a 1–2 sentence AI snippet explaining what that specific story means for *them* — referencing their sector, stage, holdings, or strategic priorities.
+A persona-driven news feed that goes beyond topic filtering. After a one-time onboarding where the user declares their role and context, every article in their feed is enriched with a 1–2 sentence AI snippet explaining what that specific story means for _them_ — referencing their sector, stage, holdings, or strategic priorities.
 
 Four personas are supported, each with a distinct context schema:
 
@@ -65,7 +65,7 @@ A persistent async worker that polls RSS feeds every 30 minutes, extracts full a
 ## System Architecture
 
 ```
-aether_ai/
+/
 ├── app/
 │   ├── main.py                        # FastAPI application root, router registration
 │   ├── core/
@@ -183,25 +183,25 @@ aether_ai/
 
 ## Tech Stack
 
-| Layer | Technology | Role |
-|---|---|---|
-| Backend Framework | FastAPI | REST API, async lifespan, CORS |
-| Frontend | Streamlit | Unified UI — My ET, Story Arc, Summarizer, Vernacular |
-| Local LLM | Ollama (llama3.1:8b default) | All generative tasks — zero cost, no API key |
-| Cloud LLM (optional) | Groq (llama3-8b-8192) | Drop-in replacement via `GROQ_API_KEY` |
-| LLM Client | openai (Python SDK) | Unified client for both Ollama and Groq via OpenAI-compatible API |
-| Vector Store | ChromaDB (persistent) | Article embeddings for My ET similarity retrieval |
-| Semantic Index | SQLite + custom embeddings | Story Arc vector cache, background ingestion |
-| Embeddings | Sentence Transformers | `all-MiniLM-L6-v2` for My ET article embeddings |
-| NLP | spaCy (`en_core_web_sm`) | Named entity recognition, sentence boundary detection |
-| Sentiment Analysis | VADER (vaderSentiment) | Per-article sentiment scoring in Story Arc |
-| Web Scraping | Trafilatura + Playwright | Hybrid full-text extraction, Playwright handles JS-rendered pages |
-| RSS Parsing | feedparser | ET feed ingestion across 5 category feeds |
-| Data Validation | Pydantic v2 | All request/response and internal schema validation |
-| Concurrency | `concurrent.futures.ThreadPoolExecutor` | Parallel LLM map phases in Summarizer and Vernacular |
-| Async Worker | `asyncio.to_thread` | Non-blocking background ingestion in FastAPI lifespan |
-| Configuration | pydantic-settings + python-dotenv | Environment-driven config with sane defaults |
-| Charts | Plotly | Interactive sentiment visualization in Story Arc |
+| Layer                | Technology                              | Role                                                              |
+| -------------------- | --------------------------------------- | ----------------------------------------------------------------- |
+| Backend Framework    | FastAPI                                 | REST API, async lifespan, CORS                                    |
+| Frontend             | Streamlit                               | Unified UI — My ET, Story Arc, Summarizer, Vernacular             |
+| Local LLM            | Ollama (llama3.1:8b default)            | All generative tasks — zero cost, no API key                      |
+| Cloud LLM (optional) | Groq (llama3-8b-8192)                   | Drop-in replacement via `GROQ_API_KEY`                            |
+| LLM Client           | openai (Python SDK)                     | Unified client for both Ollama and Groq via OpenAI-compatible API |
+| Vector Store         | ChromaDB (persistent)                   | Article embeddings for My ET similarity retrieval                 |
+| Semantic Index       | SQLite + custom embeddings              | Story Arc vector cache, background ingestion                      |
+| Embeddings           | Sentence Transformers                   | `all-MiniLM-L6-v2` for My ET article embeddings                   |
+| NLP                  | spaCy (`en_core_web_sm`)                | Named entity recognition, sentence boundary detection             |
+| Sentiment Analysis   | VADER (vaderSentiment)                  | Per-article sentiment scoring in Story Arc                        |
+| Web Scraping         | Trafilatura + Playwright                | Hybrid full-text extraction, Playwright handles JS-rendered pages |
+| RSS Parsing          | feedparser                              | ET feed ingestion across 5 category feeds                         |
+| Data Validation      | Pydantic v2                             | All request/response and internal schema validation               |
+| Concurrency          | `concurrent.futures.ThreadPoolExecutor` | Parallel LLM map phases in Summarizer and Vernacular              |
+| Async Worker         | `asyncio.to_thread`                     | Non-blocking background ingestion in FastAPI lifespan             |
+| Configuration        | pydantic-settings + python-dotenv       | Environment-driven config with sane defaults                      |
+| Charts               | Plotly                                  | Interactive sentiment visualization in Story Arc                  |
 
 ---
 
@@ -209,40 +209,40 @@ aether_ai/
 
 ### My ET
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/my-et/profile/extended` | Save extended user profile with persona context |
-| `GET` | `/api/v1/my-et/briefing/{user_id}` | Fetch AI-enriched personalized news briefing |
-| `POST` | `/api/v1/my-et/snippet` | Generate persona snippet for a single article (lazy load) |
-| `POST` | `/api/v1/my-et/deep-dive` | Full 4-section contextual breakdown of one article |
+| Method | Endpoint                           | Description                                               |
+| ------ | ---------------------------------- | --------------------------------------------------------- |
+| `POST` | `/api/v1/my-et/profile/extended`   | Save extended user profile with persona context           |
+| `GET`  | `/api/v1/my-et/briefing/{user_id}` | Fetch AI-enriched personalized news briefing              |
+| `POST` | `/api/v1/my-et/snippet`            | Generate persona snippet for a single article (lazy load) |
+| `POST` | `/api/v1/my-et/deep-dive`          | Full 4-section contextual breakdown of one article        |
 
 ### Story Arc Tracker
 
-| Method | Endpoint | Description |
-|---|---|---|
+| Method | Endpoint            | Description                             |
+| ------ | ------------------- | --------------------------------------- |
 | `POST` | `/api/v1/story-arc` | Generate complete story arc for a topic |
 
 ### News Summarizer
 
-| Method | Endpoint | Description |
-|---|---|---|
+| Method | Endpoint            | Description                        |
+| ------ | ------------------- | ---------------------------------- |
 | `POST` | `/api/v1/summarize` | Summarize article from text or URL |
 
 ### Vernacular Engine
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/v1/translate` | Translate text to Hindi, Tamil, Telugu, or Bengali |
-| `GET` | `/api/v1/translate/languages` | List supported language codes and metadata |
+| Method | Endpoint                      | Description                                        |
+| ------ | ----------------------------- | -------------------------------------------------- |
+| `POST` | `/api/v1/translate`           | Translate text to Hindi, Tamil, Telugu, or Bengali |
+| `GET`  | `/api/v1/translate/languages` | List supported language codes and metadata         |
 
 ### Utilities
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/articles/search` | Keyword search across ET RSS feeds |
-| `GET` | `/api/v1/articles/fetch` | Scrape and return full article text from a URL |
-| `GET` | `/api/v1/articles/pipeline_test` | Run hybrid extractor on one article per feed |
-| `GET` | `/health` | Application health check |
+| Method | Endpoint                         | Description                                    |
+| ------ | -------------------------------- | ---------------------------------------------- |
+| `GET`  | `/api/v1/articles/search`        | Keyword search across ET RSS feeds             |
+| `GET`  | `/api/v1/articles/fetch`         | Scrape and return full article text from a URL |
+| `GET`  | `/api/v1/articles/pipeline_test` | Run hybrid extractor on one article per feed   |
+| `GET`  | `/health`                        | Application health check                       |
 
 Full interactive documentation is available at `http://localhost:8000/docs` when the backend is running.
 
@@ -326,4 +326,4 @@ python test_pipeline.py
 
 <!--Upcoming Demo -->
 
-![aether_ai Demo](demo.gif)
+![ Demo](demo.gif)

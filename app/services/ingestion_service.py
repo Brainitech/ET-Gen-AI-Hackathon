@@ -1,5 +1,5 @@
 """
-aether_ai — Background News Ingestion Service
+ET_Intelligence — Background News Ingestion Service
 Polls RSS feeds periodically, extracts full text, runs NLP, generates embeddings,
 and stores everything in a local SQLite database for hybrid retrieval.
 """

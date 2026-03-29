@@ -1,5 +1,5 @@
 """
-aether_ai — Vernacular Business News Engine
+ — Vernacular Business News Engine
 
 Translates English business news into Hindi, Tamil, Telugu, Bengali with:
   - Base translation via local Ollama indicating high literal translation

@@ -1,5 +1,5 @@
 """
-aether_ai — Shared RSS Service
+ET_Intelligence — Shared RSS Service
 Fetches and keyword-filters Economic Times articles from RSS feeds.
 Results are cached in-memory. Implements a resilient hybrid extraction strategy
 using Trafilatura and Playwright for JS-rendered pages.
