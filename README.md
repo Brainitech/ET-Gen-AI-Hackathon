@@ -1,28 +1,98 @@
-# Project Name (TBD) 🚀
+### ET Hackathon Round 2 | 100% Free & Open Source
 
-Welcome to our initial repo for the 2026 Business News Innovation Hackathon! 
+Three AI-powered features built on live Economic Times RSS feeds:
 
-We are tackling the massive gap between how business news is currently consumed and how it *should* be consumed in the AI era. 
+| Feature                  | What it does                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------- |
+| 🗺️ **Story Arc Tracker** | Visual narrative — timeline, key players, sentiment, contrarian views, predictions |
+| 📰 **News Summarizer**   | 3-sentence AI digest + 5 key takeaways from any article                            |
+| 🌐 **Vernacular Engine** | Culturally-adapted Hindi/Tamil/Telugu/Bengali translation with local context       |
 
-## 🚨 The Problem
+---
 
-Business news in 2026 is still stuck in 2005. It's dominated by static text articles and a one-size-fits-all homepage where everyone sees the exact same format. 
+## 🚀 Quick Start
 
-**Our Goal:** Build a solution that completely changes the paradigm. We want to build something so good that users say, *"I can't go back to reading news the old way."*
+### Prerequisites
 
-## 💡 What We're Exploring (Potential Builds)
+- Python 3.9+
+- [Ollama](https://ollama.com) installed and running
 
-We are currently deciding between these core concepts to solve the problem:
+```bash
+# Pull the LLM (only once)
+ollama pull llama3.1:8b
+```
 
-* **My ET (The Personalized Newsroom):** A fundamentally different, dynamically generated news experience for every user. (e.g., specific portfolio news for investors, funding updates for founders, or explainer-first content for students).
-* **News Navigator (Interactive Intelligence Briefings):** An AI-powered deep briefing that synthesizes multiple articles on a massive topic (like the Union Budget) into one explorable, interactive document with Q&A capabilities.
-* **AI News Video Studio:** A tool that automatically transforms any text article or breaking news alert into a broadcast-quality, 60–120 second video with AI narration and data visualization.
-* **Story Arc Tracker:** A tool that maps out a complete visual narrative of an ongoing business story. Think interactive timelines, key player maps, sentiment tracking, and predictive insights.
-* **Vernacular Business News Engine:** A real-time, culturally aware translation engine that adapts English business news into Hindi, Tamil, Telugu, and Bengali with local context instead of just literal word-for-word translation.
+### Run
 
-## 🚀 Getting Started
+```bash
+cd aether_ai
 
+# Install dependencies
+pip install -r requirements.txt
 
-1. Clone the repo
-2. Install dependencies: `npm install` and `pip install -r requirements.txt`
-3. Run the dev server
+# Download spaCy model (only once)
+python -m spacy download en_core_web_sm
+
+# Terminal 1 — Backend API
+uvicorn app.main:app --reload
+# API docs: http://localhost:8000/docs
+
+# Terminal 2 — Streamlit Frontend
+streamlit run streamlit_app.py
+# Open: http://localhost:8501
+```
+
+---
+
+## 🛠️ Architecture
+
+```
+aether_ai/
+├── requirements.txt              # All free dependencies
+├── .env.example                  # Config template (no secrets needed)
+├── run.sh                        # One-command startup
+├── streamlit_app.py              # Premium dark-themed UI
+└── app/
+    ├── main.py                   # FastAPI root (3 routers)
+    ├── core/config.py            # Ollama/Groq auto-detection
+    └── services/
+        ├── rss_service.py        # Shared: ET RSS fetcher (5-min cache)
+        ├── story_arc_service.py  # VADER + spaCy + LLM narrative
+        ├── summarizer_service.py # LLM summary + extractive fallback
+        └── vernacular_service.py # Google Translate + LLM post-process
+```
+
+## 🔑 API Endpoints
+
+```
+POST /api/v1/story-arc      {"topic": "Adani Group"}
+POST /api/v1/summarize      {"text": "...", "url": "..."}
+POST /api/v1/translate      {"text": "...", "target_lang": "hi|ta|te|bn"}
+GET  /api/v1/translate/languages
+GET  /health
+GET  /docs
+```
+
+## 💡 LLM Configuration
+
+By default uses **local Ollama** (no API key needed). To use Groq cloud instead:
+
+```bash
+# .env
+GROQ_API_KEY=your_key_here
+```
+
+The app auto-detects which one to use — no code changes needed.
+
+---
+
+## Tech Stack
+
+- **FastAPI** — Backend API
+- **Streamlit** — Frontend
+- **Ollama llama3.1:8b** — Local LLM (zero cost, zero API key)
+- **vaderSentiment** — Sentiment analysis
+- **spaCy en_core_web_sm** — Named entity recognition
+- **deep-translator** — Google Translate (free, no key)
+- **feedparser** — ET RSS feeds
+- **Plotly** — Interactive charts
